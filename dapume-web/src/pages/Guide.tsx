@@ -140,12 +140,13 @@ export default function Guide() {
                           <span class="text-sm text-muted-foreground">{ex.caption[locale()]}</span>
                           <Button
                             variant={isThis() ? 'secondary' : 'default'}
-                            size="sm"
-                            class="shrink-0 gap-1.5"
+                            size="icon"
+                            class="size-8 shrink-0"
+                            title={isThis() ? t('common.stop') : t('guide.playExample')}
+                            aria-label={isThis() ? t('common.stop') : t('guide.playExample')}
                             onClick={() => togglePlay(ex.code)}
                           >
                             <Icon icon={isThis() ? 'lucide:square' : 'lucide:play'} />
-                            {isThis() ? t('common.stop') : t('guide.playExample')}
                           </Button>
                         </div>
                         <HighlightedCode code={ex.code} highlights={isThis() ? activeRanges() : []} />

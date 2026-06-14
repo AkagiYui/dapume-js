@@ -162,6 +162,87 @@
 .dark .tok-bracket  { color: oklch(0.8 0.16 145); }
 .dark .tok-chord    { color: oklch(0.8 0.16 60); }
 
+/* ===== highlight.js 主题（适配深浅色，用于开发者文档代码块）===== */
+.hljs {
+  color: var(--foreground);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: oklch(0.55 0.2 293);
+}
+.hljs-string,
+.hljs-meta .hljs-string,
+.hljs-regexp {
+  color: oklch(0.55 0.13 150);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: oklch(0.62 0.18 47);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: oklch(0.55 0.16 250);
+}
+.hljs-title.class_,
+.hljs-built_in,
+.hljs-class .hljs-title {
+  color: oklch(0.6 0.15 200);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-variable,
+.hljs-template-variable {
+  color: oklch(0.55 0.1 30);
+}
+.hljs-meta,
+.hljs-comment .hljs-doctag {
+  color: var(--muted-foreground);
+}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-literal,
+.dark .hljs-type {
+  color: oklch(0.78 0.16 293);
+}
+.dark .hljs-string,
+.dark .hljs-meta .hljs-string,
+.dark .hljs-regexp {
+  color: oklch(0.78 0.14 150);
+}
+.dark .hljs-number,
+.dark .hljs-symbol,
+.dark .hljs-bullet {
+  color: oklch(0.8 0.15 60);
+}
+.dark .hljs-title,
+.dark .hljs-title.function_,
+.dark .hljs-section {
+  color: oklch(0.75 0.13 250);
+}
+.dark .hljs-title.class_,
+.dark .hljs-built_in,
+.dark .hljs-class .hljs-title {
+  color: oklch(0.78 0.12 200);
+}
+.dark .hljs-attr,
+.dark .hljs-attribute,
+.dark .hljs-property,
+.dark .hljs-variable,
+.dark .hljs-template-variable {
+  color: oklch(0.8 0.09 40);
+}
+
 /* 播放时当前发声的整行高亮（对比度低于音符字符高亮） */
 .cm-playing-line {
   background-color: color-mix(in oklch, var(--primary) 12%, transparent);

@@ -111,8 +111,9 @@ export function SettingsPanel() {
   );
 }
 
-/** 头部用的设置按钮（弹出 SettingsPanel）。 */
+/** 头部用的设置按钮（弹出层 SettingsPanel）。 */
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
 
 export function SettingsButton() {
   return (
@@ -130,5 +131,26 @@ export function SettingsButton() {
         <SettingsPanel />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** 工作台用的设置按钮（模态框 SettingsPanel）。仅图标。 */
+export function SettingsModalButton() {
+  return (
+    <Dialog>
+      <DialogTrigger
+        as={Button}
+        variant="ghost"
+        size="icon"
+        class="size-8"
+        aria-label={t('settings.title')}
+      >
+        <Icon icon="lucide:settings" />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogTitle class="mb-4">{t('settings.title')}</DialogTitle>
+        <SettingsPanel />
+      </DialogContent>
+    </Dialog>
   );
 }

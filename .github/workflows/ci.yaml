@@ -1,0 +1,35 @@
+name: CI
+
+# 每次 push 与 PR 时触发：类型检查、测试、构建（整个工作区）。
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 先构建（拓扑顺序：dapume-js → dapume-web），dapume-web 才能解析到 dapume-js 的 dist 产物。
+      - name: Build
+        run: pnpm -r build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test

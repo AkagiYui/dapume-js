@@ -30,6 +30,8 @@ export const en: typeof zh = {
       'render() does parse + render in one step; tokenize() returns tokens for syntax highlighting; activeNotesAt() returns the notes sounding at a given time (for playback highlighting).',
     typesTitle: 'Types at a glance',
     cta: 'Try it in the workbench',
+    repo: 'GitHub repo',
+    originalRepo: 'Original Python project',
   },
   settings: {
     title: 'Settings',
@@ -71,7 +73,7 @@ export const en: typeof zh = {
     followPlayback: 'Follow playback',
     keepLine: 'Keep playing line visible',
     downloadMidi: 'Download MIDI',
-    downloadDpm: 'Download DPM',
+    downloadDpm: 'Download dapume',
     editorTitle: 'Score editor',
     hintsTitle: 'Syntax hints',
     controlsTitle: 'Controls',

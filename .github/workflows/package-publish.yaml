@@ -1,0 +1,55 @@
+name: Publish Package
+
+# 推送形如 v1.2.3 的 tag 时触发：测试 → 构建 → 通过 OIDC「可信发布」到 npm（无需 token）。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write # 可信发布（OIDC）所需
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest # 可信发布仅支持 GitHub 托管的 runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+
+      # 可信发布需要 npm >= 11.5.1，而 Node 22 自带的 npm 版本偏低，需升级。
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        working-directory: dapume-js
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG=${GITHUB_REF_NAME#v}
+          echo "tag=$TAG package=$PKG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match dapume-js version $PKG"
+            exit 1
+          fi
+
+      - name: Test
+        run: pnpm --filter dapume-js test
+
+      - name: Build
+        run: pnpm --filter dapume-js build
+
+      # 用 npm CLI 发布（pnpm 暂不支持 OIDC 可信发布）。
+      # 可信发布会自动生成 provenance，无需 --provenance 标志。
+      - name: Publish to npm
+        run: npm publish
+        working-directory: dapume-js

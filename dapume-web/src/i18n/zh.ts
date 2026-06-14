@@ -28,6 +28,8 @@ export const zh = {
       'render() 一步完成「解析 + 渲染」；tokenize() 返回用于语法高亮的词法单元；activeNotesAt() 返回某时刻正在发声的音符（可用于播放高亮）。',
     typesTitle: '类型一览',
     cta: '到工作台试试',
+    repo: 'GitHub 仓库',
+    originalRepo: '原 Python 项目',
   },
   settings: {
     title: '设置',
@@ -68,7 +70,7 @@ export const zh = {
     followPlayback: '跟随播放进度',
     keepLine: '保持当前行可视',
     downloadMidi: '下载 MIDI',
-    downloadDpm: '下载 DPM',
+    downloadDpm: '下载 dapume',
     editorTitle: '乐谱编辑器',
     hintsTitle: '语法提示',
     controlsTitle: '操作',

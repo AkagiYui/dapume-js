@@ -17,13 +17,12 @@ import type { DapumeScore } from 'dapume-js';
 import { CodeEditor } from '~/components/CodeEditor';
 import { PianoRoll } from '~/components/PianoRoll';
 import { Icon } from '~/components/Icon';
-import { SettingsPanel } from '~/components/SettingsPanel';
+import { SettingsModalButton } from '~/components/SettingsPanel';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
 import { Switch, SwitchControl, SwitchLabel, SwitchThumb } from '~/components/ui/switch';
 import { Slider, SliderFill, SliderThumb, SliderTrack } from '~/components/ui/slider';
 import { Resizable, ResizableHandle, ResizablePanel } from '~/components/ui/resizable';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 
 import { DEFAULT_SCORE, EXAMPLES } from '~/data/examples';
 import { downloadBytes, downloadText } from '~/lib/download';
@@ -74,6 +73,14 @@ function readSizes(key: string, fallback: number[]): number[] {
   return fallback;
 }
 function writeSizes(key: string, sizes: number[]): void {
+  // 仅持久化「有效」尺寸：长度 ≥ 2、均为有限正数、总和 ≈ 1。
+  // corvu 在组件卸载/初始化阶段可能回调空数组或非法值，必须忽略，
+  // 否则会把已保存的尺寸清空（刷新后即回到默认）。
+  if (!Array.isArray(sizes) || sizes.length < 2) return;
+  // 允许某一区域为 0（完全收起），但拒绝空数组 / NaN / 总和不为 1 的非法回调。
+  if (!sizes.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)) return;
+  const sum = sizes.reduce((a, b) => a + b, 0);
+  if (Math.abs(sum - 1) > 0.05) return;
   try {
     localStorage.setItem(key, JSON.stringify(sizes));
   } catch {
@@ -159,7 +166,7 @@ export default function Workbench() {
     downloadBytes(toMidi(score()), 'score.mid', 'audio/midi');
   }
   function onDownloadDpm() {
-    downloadText(scoreText(), 'score.dpm', 'text/plain');
+    downloadText(scoreText(), 'score.dapume', 'text/plain');
   }
 
   const stat = (label: string, value: string | number) => (
@@ -201,7 +208,11 @@ export default function Workbench() {
           <Icon icon="lucide:arrow-left" />
           {t('nav.guide')}
         </Button>
-        <span class="text-sm font-medium">{t('workbench.controlsTitle')}</span>
+        <div class="flex items-center gap-2">
+          {/* 设置模态框开关：放在“操作”文字左边，仅图标 */}
+          <SettingsModalButton />
+          <span class="text-sm font-medium">{t('workbench.controlsTitle')}</span>
+        </div>
       </div>
 
       <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
@@ -317,17 +328,6 @@ export default function Workbench() {
             </For>
           </div>
         </div>
-
-        <Separator />
-
-        {/* 设置 */}
-        <div class="space-y-2">
-          <div class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Icon icon="lucide:settings" />
-            {t('settings.title')}
-          </div>
-          <SettingsPanel />
-        </div>
       </div>
     </div>
   );
@@ -336,21 +336,17 @@ export default function Workbench() {
     <div class="flex h-full flex-col">
       <div class="flex items-center justify-between border-b px-3 py-1.5">
         <span class="text-sm font-medium">{t('workbench.pianoRollTitle')}</span>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-3">
           <Show when={pianoState() === 'loading'}>
             <span class="flex items-center gap-1 text-xs text-muted-foreground">
               <Icon icon="lucide:loader-circle" class="animate-spin" />
               {t('workbench.loadingPiano')} {Math.round(loadProgress() * 100)}%
             </span>
           </Show>
-          <Tooltip>
-            <TooltipTrigger as="span" class="text-xs text-muted-foreground">
-              <Icon icon="lucide:info" />
-            </TooltipTrigger>
-            <TooltipContent>
-              {locale() === 'zh' ? '滚轮平移，Ctrl+滚轮缩放' : 'Wheel to pan, Ctrl+wheel to zoom'}
-            </TooltipContent>
-          </Tooltip>
+          {/* 常驻提示，替代原 info 图标的悬浮提示 */}
+          <span class="text-xs text-muted-foreground">
+            {locale() === 'zh' ? '滚轮平移 · Ctrl+滚轮缩放' : 'Wheel: pan · Ctrl+Wheel: zoom'}
+          </span>
         </div>
       </div>
       <div class="min-h-0 flex-1">
@@ -422,7 +418,8 @@ export default function Workbench() {
             </Resizable>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel minSize={0.18} class="overflow-hidden">
+          {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
+          <ResizablePanel minSize={0} collapsible class="overflow-hidden">
             <PianoRollPane />
           </ResizablePanel>
         </Resizable>

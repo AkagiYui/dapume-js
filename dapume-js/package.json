@@ -38,8 +38,17 @@
     "simple-score",
     "jianpu"
   ],
-  "author": "",
+  "author": "AkagiYui",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AkagiYui/dapume-js.git",
+    "directory": "dapume-js"
+  },
+  "homepage": "https://github.com/AkagiYui/dapume-js#readme",
+  "bugs": {
+    "url": "https://github.com/AkagiYui/dapume-js/issues"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsdown": "^0.22.2",

@@ -1,14 +1,24 @@
 /**
  * 开发者页：介绍如何在自己的项目中使用 dapume-js 包，含安装命令与示例代码。
  */
-import { onMount } from 'solid-js';
+import { For, onMount } from 'solid-js';
 import { useNavigate } from '@tanstack/solid-router';
 import { SiteHeader } from '~/components/SiteHeader';
 import { CodeBlock } from '~/components/CodeBlock';
-import { Button } from '~/components/ui/button';
+import { Button, buttonVariants } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { t } from '~/i18n';
 import { ensurePiano } from '~/stores/player';
+
+const REPO_URL = 'https://github.com/AkagiYui/dapume-js';
+const PY_REPO_URL = 'https://github.com/ScarlettRinko/dapume';
+/** shields.io 徽章（发布后自动显示实时数据）。 */
+const BADGES = [
+  { src: 'https://img.shields.io/npm/v/dapume-js?logo=npm&color=%23cb3837', alt: 'npm version' },
+  { src: 'https://img.shields.io/npm/dm/dapume-js?color=%2334d399', alt: 'npm downloads' },
+  { src: 'https://img.shields.io/npm/l/dapume-js?color=%236366f1', alt: 'license' },
+  { src: 'https://img.shields.io/bundlephobia/minzip/dapume-js?label=minzip', alt: 'bundle size' },
+];
 
 const INSTALL = `pnpm add dapume-js
 # 或：npm install dapume-js / yarn add dapume-js`;
@@ -88,9 +98,38 @@ export default function Developers() {
         <h1 class="text-3xl font-extrabold tracking-tight">{t('dev.title')}</h1>
         <p class="mt-3 max-w-2xl text-muted-foreground">{t('dev.subtitle')}</p>
 
+        {/* 徽章 */}
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <For each={BADGES}>
+            {(b) => <img src={b.src} alt={b.alt} class="h-5" loading="lazy" />}
+          </For>
+        </div>
+
+        {/* 仓库链接 */}
+        <div class="mt-4 flex flex-wrap gap-2">
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            class={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <Icon icon="lucide:github" />
+            {t('dev.repo')}
+          </a>
+          <a
+            href={PY_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            class={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <Icon icon="lucide:github" />
+            {t('dev.originalRepo')}
+          </a>
+        </div>
+
         <div class="mt-6">
           <Section title={t('dev.installTitle')} desc={t('dev.installDesc')}>
-            <CodeBlock code={INSTALL} />
+            <CodeBlock code={INSTALL} lang="bash" />
           </Section>
 
           <Section title={t('dev.apiTitle')} desc={t('dev.apiDesc')}>
