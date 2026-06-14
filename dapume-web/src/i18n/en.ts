@@ -1,0 +1,71 @@
+import type { zh } from './zh';
+
+/** English strings. Structure mirrors zh.ts. */
+export const en: typeof zh = {
+  app: {
+    title: 'Dapume',
+    tagline: 'Linear score editor & player',
+  },
+  nav: {
+    guide: 'Rules & Syntax',
+    workbench: 'Workbench',
+    tryNow: 'Try it now',
+  },
+  settings: {
+    title: 'Settings',
+    theme: 'Appearance',
+    light: 'Light',
+    dark: 'Dark',
+    system: 'System',
+    themeColor: 'Theme color',
+    language: 'Language',
+  },
+  color: {
+    default: 'Default',
+    blue: 'Blue',
+    violet: 'Violet',
+    green: 'Green',
+    rose: 'Rose',
+    orange: 'Orange',
+    amber: 'Amber',
+  },
+  common: {
+    play: 'Play',
+    stop: 'Stop',
+    loading: 'Loading…',
+  },
+  guide: {
+    heroTitle: 'Dapume · Linear Score',
+    heroSubtitle:
+      'Write simple scores as plain text and render them to MIDI in one click. Let’s walk through the rules and syntax.',
+    heroCta: 'Try it now',
+    tocTitle: 'Contents',
+    playExample: 'Play example',
+    backToTop: 'Back to top',
+  },
+  workbench: {
+    play: 'Play',
+    pause: 'Pause',
+    stop: 'Stop',
+    replay: 'Play from start',
+    followPlayback: 'Follow playback',
+    downloadMidi: 'Download MIDI',
+    downloadDpm: 'Download DPM',
+    editorTitle: 'Score editor',
+    hintsTitle: 'Syntax hints',
+    controlsTitle: 'Controls',
+    pianoRollTitle: 'Piano roll',
+    loadingPiano: 'Loading piano samples…',
+    pianoReady: 'Samples ready',
+    audioError: 'Failed to load samples, check your network',
+    emptyScore: 'Type dapume text in the editor on the left; the score renders here in real time',
+    examples: 'Examples',
+    loadExample: 'Load example',
+    clear: 'Clear',
+    notes: 'Notes',
+    tracks: 'Tracks',
+    duration: 'Duration',
+    playingLocked: 'Playing — editing is locked',
+    quickRef: 'Quick reference',
+  },
+};

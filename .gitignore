@@ -1,0 +1,51 @@
+# ---- 依赖 ----
+node_modules/
+.pnpm-store/
+
+# ---- 构建产物 ----
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ---- 测试与覆盖率 ----
+coverage/
+.vitest/
+
+# ---- 参考用的 Python 原项目（不纳入本仓库版本管理）----
+dapume-py/
+
+# ---- 生成的文件 ----
+*.mid
+*.wav
+output.*
+
+# ---- 缓存 ----
+.cache/
+.temp/
+.vite/
+*.local
+
+# ---- 日志 ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- 编辑器 / 操作系统 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ---- 环境变量 ----
+.env
+.env.*
+!.env.example

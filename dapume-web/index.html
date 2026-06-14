@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>打谱么 · dapume</title>
+    <meta name="description" content="线性乐谱（dapume）在线编辑与播放工具" />
+    <!--
+      在主包加载前，先根据 localStorage 中保存的偏好设置好深浅色与主题色，
+      避免首屏闪烁（FOUC）。
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('dapume.theme') || 'system';
+          var dark =
+            t === 'dark' ||
+            (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          var c = localStorage.getItem('dapume.themeColor');
+          if (c) document.documentElement.setAttribute('data-theme', c);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

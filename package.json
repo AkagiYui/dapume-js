@@ -1,13 +1,29 @@
 {
-  "name": "dapume-js",
+  "name": "dapume-monorepo",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "打谱么 monorepo —— 线性乐谱（dapume）解析与渲染工具链",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "pnpm -r build",
+    "build:js": "pnpm --filter dapume-js build",
+    "build:web": "pnpm --filter dapume-web build",
+    "dev:web": "pnpm --filter dapume-web dev",
+    "test": "pnpm -r test",
+    "test:js": "pnpm --filter dapume-js test",
+    "typecheck": "pnpm -r typecheck"
   },
-  "keywords": [],
+  "keywords": [
+    "dapume",
+    "linear-score",
+    "midi",
+    "music",
+    "monorepo"
+  ],
   "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.33.1"
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.1",
+  "engines": {
+    "node": ">=22.18.0"
+  }
 }

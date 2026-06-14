@@ -1,0 +1,5 @@
+# pnpm workspace 配置：声明本 monorepo 包含的子包
+# 文档：https://pnpm.io/workspaces
+packages:
+  - 'dapume-js'
+  - 'dapume-web'
