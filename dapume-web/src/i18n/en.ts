@@ -8,8 +8,28 @@ export const en: typeof zh = {
   },
   nav: {
     guide: 'Rules & Syntax',
+    developers: 'Developers',
     workbench: 'Workbench',
     tryNow: 'Try it now',
+  },
+  dev: {
+    title: 'Use dapume-js in your project',
+    subtitle:
+      'dapume-js is a zero-dependency TypeScript library that parses linear scores into a score object and renders MIDI, in Node and the browser. This very site is built on it.',
+    installTitle: 'Install',
+    installDesc: 'Install with your favorite package manager:',
+    apiTitle: 'Core API',
+    apiDesc:
+      'The library exposes two core functions: parse() turns dapume text into a score object, and toMidi() renders a score object into MIDI file bytes (Uint8Array).',
+    nodeTitle: 'In Node',
+    nodeDesc: 'Parse, render to MIDI, then write a file:',
+    browserTitle: 'In the browser',
+    browserDesc: 'With the MIDI bytes, trigger a download via a Blob:',
+    moreTitle: 'More helpers',
+    moreDesc:
+      'render() does parse + render in one step; tokenize() returns tokens for syntax highlighting; activeNotesAt() returns the notes sounding at a given time (for playback highlighting).',
+    typesTitle: 'Types at a glance',
+    cta: 'Try it in the workbench',
   },
   settings: {
     title: 'Settings',
@@ -49,6 +69,7 @@ export const en: typeof zh = {
     stop: 'Stop',
     replay: 'Play from start',
     followPlayback: 'Follow playback',
+    keepLine: 'Keep playing line visible',
     downloadMidi: 'Download MIDI',
     downloadDpm: 'Download DPM',
     editorTitle: 'Score editor',

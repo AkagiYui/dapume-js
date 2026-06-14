@@ -5,15 +5,18 @@
  * 以获得真实的钢琴音色。负责：加载音色、按绝对时间调度音符、维护播放进度信号。
  */
 import { createSignal } from 'solid-js';
-import { SplendidGrandPiano } from 'smplr';
+import { CacheStorage, SplendidGrandPiano } from 'smplr';
 import type { DapumeNote } from 'dapume-js';
 
 /** 播放器对外暴露的音色加载状态。 */
 export type PianoState = 'idle' | 'loading' | 'ready' | 'error';
 
+/** 单个音符的停止函数（smplr 的 start() 返回值）。 */
+type StopFn = (time?: number) => void;
+
 /** 仅声明本模块用到的 smplr 实例方法，避免对其内部类型的强耦合。 */
 interface Instrument {
-  start(event: { note: number; time?: number; duration?: number; velocity?: number }): unknown;
+  start(event: { note: number; time?: number; duration?: number; velocity?: number }): StopFn;
   stop(): void;
   ready: Promise<unknown>;
 }
@@ -21,6 +24,8 @@ interface Instrument {
 const [isPlaying, setIsPlaying] = createSignal(false);
 const [currentTimeMs, setCurrentTimeMs] = createSignal(0);
 const [pianoState, setPianoState] = createSignal<PianoState>('idle');
+/** 音色加载进度（0~1）。 */
+const [loadProgress, setLoadProgress] = createSignal(0);
 
 let ctx: AudioContext | null = null;
 let piano: Instrument | null = null;
@@ -32,6 +37,7 @@ let baseCtxTime = 0; // 播放开始时的 AudioContext 时刻（秒）
 let baseOffsetMs = 0; // 该时刻对应的乐谱毫秒位置（用于从中途续播）
 let totalDurationMs = 0;
 let pausedAtMs = 0;
+let activeStops: StopFn[] = []; // 本次播放已调度音符的停止函数
 
 /** 懒创建 AudioContext。 */
 function getCtx(): AudioContext {
@@ -43,10 +49,20 @@ function getCtx(): AudioContext {
 export function ensurePiano(): Promise<Instrument> {
   if (pianoLoad) return pianoLoad;
   setPianoState('loading');
-  const instrument = new SplendidGrandPiano(getCtx()) as unknown as Instrument;
+  setLoadProgress(0);
+  // storage: 用 CacheStorage（基于浏览器 Cache API）缓存采样，刷新后不再重复下载；
+  //          非安全上下文（非 https/localhost）会自动回退为普通网络请求。
+  // onLoadProgress: 上报加载进度，供 UI 显示。
+  const instrument = new SplendidGrandPiano(getCtx(), {
+    storage: CacheStorage(),
+    onLoadProgress: (p: { loaded: number; total: number }) => {
+      setLoadProgress(p.total > 0 ? p.loaded / p.total : 0);
+    },
+  }) as unknown as Instrument;
   piano = instrument;
   pianoLoad = instrument.ready
     .then(() => {
+      setLoadProgress(1);
       setPianoState('ready');
       return instrument;
     })
@@ -66,6 +82,28 @@ function stopLoop(): void {
   if (endTimer) {
     clearTimeout(endTimer);
     endTimer = 0;
+  }
+}
+
+/**
+ * 立即停止所有已调度/正在发声的音符。
+ *
+ * 关键：smplr 用绝对时间一次性排程了全部音符，仅调用 `piano.stop()` 不一定能取消
+ * 那些「尚未到时」的音符。因此这里同时调用每个音符 start() 返回的停止函数，确保彻底停止。
+ */
+function stopAllNotes(): void {
+  for (const s of activeStops) {
+    try {
+      s();
+    } catch {
+      /* 忽略 */
+    }
+  }
+  activeStops = [];
+  try {
+    piano?.stop();
+  } catch {
+    /* 忽略 */
   }
 }
 
@@ -94,7 +132,7 @@ export async function play(notes: DapumeNote[], durationMs: number, fromMs = 0):
   const instrument = await ensurePiano();
 
   stopLoop();
-  instrument.stop(); // 清除先前仍在调度/发声的音符，避免叠加
+  stopAllNotes(); // 清除先前仍在调度/发声的音符，避免叠加
   totalDurationMs = durationMs;
   baseOffsetMs = fromMs;
   baseCtxTime = context.currentTime + 0.12; // 留一点调度提前量
@@ -105,12 +143,13 @@ export async function play(notes: DapumeNote[], durationMs: number, fromMs = 0):
     // 续播时，对仍在发声的音符做尾段截断
     const startMs = Math.max(n.startTime, fromMs);
     const dur = end - startMs;
-    instrument.start({
+    const stopFn = instrument.start({
       note: n.pitch,
       time: baseCtxTime + (startMs - fromMs) / 1000,
       duration: dur / 1000,
       velocity: 96,
     });
+    activeStops.push(stopFn);
   }
 
   setCurrentTimeMs(fromMs);
@@ -124,14 +163,14 @@ export async function play(notes: DapumeNote[], durationMs: number, fromMs = 0):
 export function pause(): void {
   pausedAtMs = currentTimeMs();
   stopLoop();
-  piano?.stop();
+  stopAllNotes();
   setIsPlaying(false);
 }
 
 /** 停止：停止发声并将进度归零。 */
 export function stop(): void {
   stopLoop();
-  piano?.stop();
+  stopAllNotes();
   pausedAtMs = 0;
   setIsPlaying(false);
   setCurrentTimeMs(0);
@@ -148,4 +187,4 @@ export function seek(ms: number): void {
   setCurrentTimeMs(ms);
 }
 
-export { isPlaying, currentTimeMs, pianoState };
+export { isPlaying, currentTimeMs, pianoState, loadProgress };

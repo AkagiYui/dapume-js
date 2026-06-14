@@ -6,8 +6,28 @@ export const zh = {
   },
   nav: {
     guide: '规则与语法',
+    developers: '开发者',
     workbench: '工作台',
     tryNow: '马上尝试',
+  },
+  dev: {
+    title: '在你的项目中使用 dapume-js',
+    subtitle:
+      'dapume-js 是一个零依赖的 TypeScript 库，可在 Node 与浏览器中把线性乐谱解析为乐谱对象，并渲染为 MIDI。本站正是基于它构建的示例。',
+    installTitle: '安装',
+    installDesc: '用你喜欢的包管理器安装：',
+    apiTitle: '核心 API',
+    apiDesc:
+      '库暴露两个核心函数：parse() 把 dapume 文本解析为乐谱对象，toMidi() 把乐谱对象渲染为 MIDI 文件字节（Uint8Array）。',
+    nodeTitle: '在 Node 中使用',
+    nodeDesc: '解析并渲染为 MIDI，然后写入文件：',
+    browserTitle: '在浏览器中使用',
+    browserDesc: '得到 MIDI 字节后，用 Blob 触发下载：',
+    moreTitle: '更多工具函数',
+    moreDesc:
+      'render() 一步完成「解析 + 渲染」；tokenize() 返回用于语法高亮的词法单元；activeNotesAt() 返回某时刻正在发声的音符（可用于播放高亮）。',
+    typesTitle: '类型一览',
+    cta: '到工作台试试',
   },
   settings: {
     title: '设置',
@@ -46,6 +66,7 @@ export const zh = {
     stop: '停止',
     replay: '从头播放',
     followPlayback: '跟随播放进度',
+    keepLine: '保持当前行可视',
     downloadMidi: '下载 MIDI',
     downloadDpm: '下载 DPM',
     editorTitle: '乐谱编辑器',

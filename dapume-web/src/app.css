@@ -162,6 +162,11 @@
 .dark .tok-bracket  { color: oklch(0.8 0.16 145); }
 .dark .tok-chord    { color: oklch(0.8 0.16 60); }
 
+/* 播放时当前发声的整行高亮（对比度低于音符字符高亮） */
+.cm-playing-line {
+  background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+
 /* 播放时当前发声的音符/和弦字符高亮 */
 .cm-playing-highlight {
   background-color: color-mix(in oklch, var(--primary) 35%, transparent);

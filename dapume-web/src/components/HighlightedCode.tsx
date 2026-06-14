@@ -1,5 +1,6 @@
 /**
  * 静态 dapume 代码块，带语法高亮（复用 dapume-js 的 tokenize）。
+ * 可选 highlights：在指定源字符范围上叠加「当前发声」高亮（用于指南页示例播放）。
  */
 import { For, Show } from 'solid-js';
 import { tokenize } from 'dapume-js';
@@ -9,22 +10,40 @@ import { cn } from '~/lib/utils';
 interface Segment {
   text: string;
   cls?: string;
+  hl: boolean;
 }
 
-function segment(code: string): Segment[] {
+/** 按「词法单元边界 + 高亮边界」切分文本，每段携带配色类与是否高亮。 */
+function buildSegments(code: string, highlights: { from: number; to: number }[]): Segment[] {
   const tokens = tokenize(code);
-  const out: Segment[] = [];
-  let pos = 0;
+  const points = new Set<number>([0, code.length]);
   for (const tk of tokens) {
-    if (tk.start > pos) out.push({ text: code.slice(pos, tk.start) });
-    out.push({ text: code.slice(tk.start, tk.end), cls: TOKEN_CLASS[tk.type] });
-    pos = tk.end;
+    points.add(tk.start);
+    points.add(tk.end);
   }
-  if (pos < code.length) out.push({ text: code.slice(pos) });
-  return out;
+  for (const h of highlights) {
+    points.add(Math.max(0, Math.min(h.from, code.length)));
+    points.add(Math.max(0, Math.min(h.to, code.length)));
+  }
+  const sorted = [...points].sort((a, b) => a - b);
+  const segs: Segment[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i]!;
+    const b = sorted[i + 1]!;
+    if (a >= b) continue;
+    const tk = tokens.find((t) => t.start <= a && t.end >= b);
+    const hl = highlights.some((h) => h.from <= a && h.to >= b);
+    segs.push({ text: code.slice(a, b), cls: tk ? TOKEN_CLASS[tk.type] : undefined, hl });
+  }
+  return segs;
 }
 
-export function HighlightedCode(props: { code: string; class?: string }) {
+export function HighlightedCode(props: {
+  code: string;
+  highlights?: { from: number; to: number }[];
+  class?: string;
+}) {
+  const segs = () => buildSegments(props.code, props.highlights ?? []);
   return (
     <pre
       class={cn(
@@ -33,10 +52,10 @@ export function HighlightedCode(props: { code: string; class?: string }) {
       )}
     >
       <code>
-        <For each={segment(props.code)}>
+        <For each={segs()}>
           {(s) => (
-            <Show when={s.cls} fallback={<>{s.text}</>}>
-              <span class={s.cls}>{s.text}</span>
+            <Show when={s.cls || s.hl} fallback={<>{s.text}</>}>
+              <span class={cn(s.cls, s.hl && 'cm-playing-highlight')}>{s.text}</span>
             </Show>
           )}
         </For>

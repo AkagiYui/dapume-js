@@ -82,6 +82,37 @@ const highlightField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+/** 当前发声的「行」高亮（对比度比音符字符高亮更低）。 */
+const playingLine = Decoration.line({ class: 'cm-playing-line' });
+
+const lineHighlightField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setHighlights)) {
+        const doc = tr.state.doc;
+        const docLen = doc.length;
+        const lines = new Set<number>();
+        for (const r of e.value) {
+          const from = Math.max(0, Math.min(r.from, docLen));
+          const to = Math.max(0, Math.min(r.to, docLen));
+          if (to <= from) continue;
+          const a = doc.lineAt(from).number;
+          const b = doc.lineAt(Math.max(from, to - 1)).number;
+          for (let n = a; n <= b; n++) lines.add(n);
+        }
+        const ranges = [...lines]
+          .sort((x, y) => x - y)
+          .map((n) => playingLine.range(doc.line(n).from));
+        deco = Decoration.set(ranges, true);
+      }
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 const editableComp = new Compartment();
 
 export interface CodeEditorProps {
@@ -89,6 +120,8 @@ export interface CodeEditorProps {
   onChange?: (v: string) => void;
   readOnly?: boolean;
   highlights?: HighlightRange[];
+  /** 是否在播放时把当前发声的行滚动到可视区域。 */
+  keepVisible?: boolean;
   placeholder?: string;
 }
 
@@ -109,6 +142,7 @@ export function CodeEditor(props: CodeEditorProps) {
           highlightActiveLineGutter(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           tokenPlugin,
+          lineHighlightField,
           highlightField,
           EditorView.lineWrapping,
           cmPlaceholder(props.placeholder ?? ''),
@@ -143,10 +177,21 @@ export function CodeEditor(props: CodeEditorProps) {
     });
   });
 
-  // 播放高亮
+  // 播放高亮（含当前行高亮），并按需把当前发声的行滚动到可视区域
   createEffect(() => {
-    const ranges = props.highlights ?? [];
-    view?.dispatch({ effects: setHighlights.of(ranges.map((r) => ({ from: r.from, to: r.to }))) });
+    const ranges = (props.highlights ?? []).map((r) => ({ from: r.from, to: r.to }));
+    const v = view;
+    if (!v) return;
+    if (props.keepVisible && ranges.length > 0) {
+      // 滚动到当前行的行首，使同一行内不抖动
+      const pos = Math.min(ranges[0]!.from, v.state.doc.length);
+      const lineFrom = v.state.doc.lineAt(pos).from;
+      v.dispatch({
+        effects: [setHighlights.of(ranges), EditorView.scrollIntoView(lineFrom, { y: 'center' })],
+      });
+    } else {
+      v.dispatch({ effects: setHighlights.of(ranges) });
+    }
   });
 
   onCleanup(() => view?.destroy());

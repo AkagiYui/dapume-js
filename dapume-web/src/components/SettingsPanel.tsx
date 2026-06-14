@@ -27,13 +27,20 @@ const SWATCH: Record<ThemeColor, string> = {
   amber: 'oklch(0.769 0.188 70.08)',
 };
 
-/** 分段控件中的单个按钮。 */
-function Seg(props: { active: boolean; onClick: () => void; children: JSX.Element }) {
+/** 分段控件中的单个按钮。min-w-0 防止内容把按钮组撑出边界。 */
+function Seg(props: {
+  active: boolean;
+  onClick: () => void;
+  title?: string;
+  children: JSX.Element;
+}) {
   return (
     <Button
       variant={props.active ? 'default' : 'ghost'}
       size="sm"
-      class="h-8 flex-1 gap-1.5"
+      class="h-8 min-w-0 flex-1 gap-1.5 px-2"
+      title={props.title}
+      aria-label={props.title}
       onClick={props.onClick}
     >
       {props.children}
@@ -52,20 +59,18 @@ function Group(props: { label: string; children: JSX.Element }) {
 
 export function SettingsPanel() {
   return (
-    <div class="flex w-56 flex-col gap-4">
+    <div class="flex w-full flex-col gap-4">
       <Group label={t('settings.theme')}>
+        {/* 仅用图标，配 title 提示，避免「跟随系统」文字撑出按钮组 */}
         <div class="flex gap-1 rounded-md border p-1">
-          <Seg active={theme() === 'light'} onClick={() => setTheme('light')}>
+          <Seg active={theme() === 'light'} title={t('settings.light')} onClick={() => setTheme('light')}>
             <Icon icon="lucide:sun" />
-            <span class="text-xs">{t('settings.light')}</span>
           </Seg>
-          <Seg active={theme() === 'dark'} onClick={() => setTheme('dark')}>
+          <Seg active={theme() === 'dark'} title={t('settings.dark')} onClick={() => setTheme('dark')}>
             <Icon icon="lucide:moon" />
-            <span class="text-xs">{t('settings.dark')}</span>
           </Seg>
-          <Seg active={theme() === 'system'} onClick={() => setTheme('system')}>
+          <Seg active={theme() === 'system'} title={t('settings.system')} onClick={() => setTheme('system')}>
             <Icon icon="lucide:monitor" />
-            <span class="text-xs">{t('settings.system')}</span>
           </Seg>
         </div>
       </Group>
@@ -121,7 +126,7 @@ export function SettingsButton() {
       >
         <Icon icon="lucide:settings" />
       </PopoverTrigger>
-      <PopoverContent class="w-auto">
+      <PopoverContent class="w-72">
         <SettingsPanel />
       </PopoverContent>
     </Popover>

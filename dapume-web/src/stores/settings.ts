@@ -43,16 +43,22 @@ function initTheme(): ThemeChoice {
 
 const [theme, setTheme] = createSignal<ThemeChoice>(initTheme());
 
-/** 计算并应用 .dark 类。 */
+/** 解析出的「当前是否深色」（响应式）。无论是用户切换还是系统主题变化都会更新。 */
+function resolveDark(choice: ThemeChoice): boolean {
+  return choice === 'dark' || (choice === 'system' && media.matches);
+}
+const [dark, setDark] = createSignal(resolveDark(initTheme()));
+
+/** 计算并应用 .dark 类，同时更新响应式 dark 信号。 */
 function applyTheme(choice: ThemeChoice): void {
-  const dark = choice === 'dark' || (choice === 'system' && media.matches);
-  document.documentElement.classList.toggle('dark', dark);
+  const d = resolveDark(choice);
+  document.documentElement.classList.toggle('dark', d);
+  setDark(d);
 }
 
-/** 当前是否处于深色（用于需要判断的场景，如画布配色）。 */
+/** 当前是否处于深色（响应式，可在 createEffect/JSX 中订阅，如画布配色）。 */
 export function isDark(): boolean {
-  const c = theme();
-  return c === 'dark' || (c === 'system' && media.matches);
+  return dark();
 }
 
 // ===== 主题色 =====

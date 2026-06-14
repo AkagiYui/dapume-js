@@ -1,22 +1,41 @@
 /**
  * 第一页：规则与语法讲解。
- * 逐节介绍 dapume 语法，并为每个示例提供「播放」按钮；顶部「马上尝试」按钮跳转到工作台。
+ * 逐节介绍 dapume 语法，并为每个示例提供「播放」按钮（播放时高亮当前发声的音符字符）；
+ * 顶部「马上尝试」按钮跳转到工作台。进入页面即预热音源。
  */
-import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
-import { parse } from 'dapume-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { useNavigate } from '@tanstack/solid-router';
+import { activeNotesAt, parse } from 'dapume-js';
 import { GUIDE_SECTIONS } from '~/data/guide';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
-import { isPlaying, pianoState, play, stop } from '~/stores/player';
+import { currentTimeMs, ensurePiano, isPlaying, play, stop } from '~/stores/player';
+import { SiteHeader } from '~/components/SiteHeader';
 import { HighlightedCode } from '~/components/HighlightedCode';
 import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
-import { SettingsButton } from '~/components/SettingsPanel';
 
 export default function Guide() {
   const navigate = useNavigate();
   const [playingCode, setPlayingCode] = createSignal<string | null>(null);
+
+  // 进入页面即预热音源（加载进度显示在 header 中）
+  onMount(() => {
+    ensurePiano().catch(() => {});
+  });
+
+  // 当前正在播放的示例对应的乐谱（用于计算高亮）
+  const playingScore = createMemo(() => {
+    const c = playingCode();
+    return c ? parse(c) : null;
+  });
+
+  // 当前发声音符的源字符范围
+  const activeRanges = createMemo(() => {
+    const s = playingScore();
+    if (!s || !isPlaying()) return [];
+    return activeNotesAt(s, currentTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
+  });
 
   // 播放自然结束时复位按钮状态
   createEffect(() => {
@@ -40,22 +59,7 @@ export default function Guide() {
 
   return (
     <div class="min-h-full">
-      {/* 头部 */}
-      <header class="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-        <div class="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <div class="flex items-baseline gap-2">
-            <span class="text-lg font-bold">{t('app.title')}</span>
-            <span class="hidden text-sm text-muted-foreground sm:inline">{t('app.tagline')}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <Button variant="ghost" size="sm" class="gap-1.5" onClick={() => navigate('/workbench')}>
-              <Icon icon="lucide:square-pen" />
-              {t('nav.workbench')}
-            </Button>
-            <SettingsButton />
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Hero */}
       <section class="mx-auto max-w-4xl px-4 py-14 text-center">
@@ -66,17 +70,11 @@ export default function Guide() {
           {t('guide.heroSubtitle')}
         </p>
         <div class="mt-7 flex items-center justify-center gap-3">
-          <Button size="lg" class="gap-2" onClick={() => navigate('/workbench')}>
+          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
             {t('guide.heroCta')}
             <Icon icon="lucide:arrow-right" />
           </Button>
         </div>
-        <Show when={pianoState() === 'loading'}>
-          <p class="mt-4 text-xs text-muted-foreground">{t('workbench.loadingPiano')}</p>
-        </Show>
-        <Show when={pianoState() === 'error'}>
-          <p class="mt-4 text-xs text-destructive">{t('workbench.audioError')}</p>
-        </Show>
       </section>
 
       {/* 目录 */}
@@ -120,9 +118,7 @@ export default function Guide() {
                           {(row) => (
                             <tr class="border-b last:border-0">
                               <For each={row}>
-                                {(cell) => (
-                                  <td class="px-3 py-1.5 font-mono">{cell[locale()]}</td>
-                                )}
+                                {(cell) => <td class="px-3 py-1.5 font-mono">{cell[locale()]}</td>}
                               </For>
                             </tr>
                           )}
@@ -133,26 +129,29 @@ export default function Guide() {
                 )}
               </Show>
 
-              {/* 示例（可播放） */}
+              {/* 示例（可播放，播放时高亮当前音符） */}
               <div class="mt-5 space-y-3">
                 <For each={section.examples}>
-                  {(ex) => (
-                    <div class="rounded-lg border bg-card p-3">
-                      <div class="mb-2 flex items-center justify-between gap-3">
-                        <span class="text-sm text-muted-foreground">{ex.caption[locale()]}</span>
-                        <Button
-                          variant={playingCode() === ex.code && isPlaying() ? 'secondary' : 'default'}
-                          size="sm"
-                          class="shrink-0 gap-1.5"
-                          onClick={() => togglePlay(ex.code)}
-                        >
-                          <Icon icon={playingCode() === ex.code && isPlaying() ? 'lucide:square' : 'lucide:play'} />
-                          {playingCode() === ex.code && isPlaying() ? t('common.stop') : t('guide.playExample')}
-                        </Button>
+                  {(ex) => {
+                    const isThis = () => playingCode() === ex.code && isPlaying();
+                    return (
+                      <div class="rounded-lg border bg-card p-3">
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                          <span class="text-sm text-muted-foreground">{ex.caption[locale()]}</span>
+                          <Button
+                            variant={isThis() ? 'secondary' : 'default'}
+                            size="sm"
+                            class="shrink-0 gap-1.5"
+                            onClick={() => togglePlay(ex.code)}
+                          >
+                            <Icon icon={isThis() ? 'lucide:square' : 'lucide:play'} />
+                            {isThis() ? t('common.stop') : t('guide.playExample')}
+                          </Button>
+                        </div>
+                        <HighlightedCode code={ex.code} highlights={isThis() ? activeRanges() : []} />
                       </div>
-                      <HighlightedCode code={ex.code} />
-                    </div>
-                  )}
+                    );
+                  }}
                 </For>
               </div>
             </section>
@@ -160,7 +159,7 @@ export default function Guide() {
         </For>
 
         <div class="py-10 text-center">
-          <Button size="lg" class="gap-2" onClick={() => navigate('/workbench')}>
+          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
             {t('guide.heroCta')}
             <Icon icon="lucide:arrow-right" />
           </Button>

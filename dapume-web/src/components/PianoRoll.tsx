@@ -7,6 +7,7 @@
 import { createEffect, onCleanup, onMount } from 'solid-js';
 import type { DapumeNote } from 'dapume-js';
 import { clamp } from '~/lib/utils';
+import { isDark, themeColor } from '~/stores/settings';
 
 export interface PianoRollProps {
   notes: DapumeNote[];
@@ -208,13 +209,15 @@ export function PianoRoll(props: PianoRollProps) {
     onCleanup(() => ro.disconnect());
   });
 
-  // 响应式重绘：时间、音符、跟随状态变化均触发
+  // 响应式重绘：时间、音符、跟随状态、深浅色/主题色变化均触发
   createEffect(() => {
     // 读取依赖
     void props.currentTimeMs;
     void props.notes;
     void props.follow;
     void props.durationMs;
+    void isDark(); // 深浅色切换后重绘，使画布配色同步更新
+    void themeColor(); // 主题色切换后重绘（播放指针颜色）
     draw();
   });
 
