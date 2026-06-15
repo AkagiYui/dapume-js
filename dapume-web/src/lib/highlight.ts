@@ -5,9 +5,11 @@
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import bash from 'highlight.js/lib/languages/bash';
+import json from 'highlight.js/lib/languages/json';
 
 hljs.registerLanguage('typescript', typescript);
 hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('json', json);
 
 /** 返回高亮后的 HTML 字符串（已对代码内容转义，可安全用于 innerHTML）。 */
 export function highlightCode(code: string, lang: string): string {

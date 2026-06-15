@@ -10,6 +10,8 @@ import { ApiTester } from '~/components/ApiTester';
 import { Button, buttonVariants } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { t } from '~/i18n';
+import { locale } from '~/stores/settings';
+import type { Locale } from '~/stores/settings';
 import { ensurePiano } from '~/stores/player';
 
 const REPO_URL = 'https://github.com/AkagiYui/dapume-js';
@@ -32,10 +34,13 @@ const BADGES = [
   },
 ];
 
-const INSTALL = `pnpm add dapume-js
-# 或：npm install dapume-js / yarn add dapume-js`;
+// 示例代码：注释随语言切换（zh/en）。
+const zh = (l: Locale) => l === 'zh';
 
-const API = `import { parse, toMidi } from 'dapume-js';
+const INSTALL = (l: Locale) => `pnpm add dapume-js
+# ${zh(l) ? '或：npm install dapume-js / yarn add dapume-js' : 'or: npm install dapume-js / yarn add dapume-js'}`;
+
+const API = (l: Locale) => `import { parse, toMidi } from 'dapume-js';
 
 const score = parse(\`1=C 120bpm
 1234567\`);
@@ -43,13 +48,13 @@ const score = parse(\`1=C 120bpm
 console.log(score.notes.length); // 7
 const midi: Uint8Array = toMidi(score);`;
 
-const NODE = `import { writeFileSync } from 'node:fs';
+const NODE = (l: Locale) => `import { writeFileSync } from 'node:fs';
 import { render } from 'dapume-js';
 
-// render(text) 等价于 toMidi(parse(text))
+// ${zh(l) ? 'render(text) 等价于 toMidi(parse(text))' : 'render(text) is equivalent to toMidi(parse(text))'}
 writeFileSync('output.mid', render('1=C 120bpm\\n1234567'));`;
 
-const BROWSER = `import { render } from 'dapume-js';
+const BROWSER = (_l: Locale) => `import { render } from 'dapume-js';
 
 const bytes = render(scoreText);
 const blob = new Blob([bytes], { type: 'audio/midi' });
@@ -60,38 +65,56 @@ a.download = 'score.mid';
 a.click();
 URL.revokeObjectURL(url);`;
 
-const MORE = `import { parse, render, tokenize, activeNotesAt, paramsAt } from 'dapume-js';
+const MORE = (l: Locale) => {
+  const c = zh(l)
+    ? {
+        render: '解析 + 渲染',
+        tok: '语法高亮词法单元',
+        active: '第 300ms 正在发声的音符',
+        params: '第 300ms 生效的调号/速度 → "D", 90',
+      }
+    : {
+        render: 'parse + render',
+        tok: 'tokens for syntax highlighting',
+        active: 'notes sounding at 300ms',
+        params: 'key/tempo in effect at 300ms → "D", 90',
+      };
+  return `import { parse, render, tokenize, activeNotesAt, paramsAt } from 'dapume-js';
 
-const mid = render('1=C\\n1234567');          // 解析 + 渲染
-const tokens = tokenize('1=C\\n[4M7]2');        // 语法高亮词法单元
+const mid = render('1=C\\n1234567');          // ${c.render}
+const tokens = tokenize('1=C\\n[4M7]2');        // ${c.tok}
 const score = parse('1=D 90bpm\\n1234567');
-const sounding = activeNotesAt(score, 300);     // 第 300ms 正在发声的音符
-const { key, bpm } = paramsAt(score, 300);      // 第 300ms 生效的调号/速度 → "D", 90`;
+const sounding = activeNotesAt(score, 300);     // ${c.active}
+const { key, bpm } = paramsAt(score, 300);      // ${c.params}`;
+};
 
-const TYPES = `interface DapumeScore {
-  tracks: DapumeNote[][];     // 按音轨分组（渲染 MIDI 用）
-  notes: DapumeNote[];        // 扁平列表，按开始时刻升序
+const TYPES = (l: Locale) => {
+  const z = zh(l);
+  return `interface DapumeScore {
+  tracks: DapumeNote[][];     // ${z ? '按音轨分组（渲染 MIDI 用）' : 'grouped by track (for MIDI)'}
+  notes: DapumeNote[];        // ${z ? '扁平列表，按开始时刻升序' : 'flat list, sorted by start time'}
   trackCount: number;
   durationMs: number;
-  sections: DapumeSection[];  // 各参数段（调号/速度随时间变化）
+  sections: DapumeSection[];  // ${z ? '各参数段（调号/速度随时间变化）' : 'parameter sections (key/tempo over time)'}
 }
 
 interface DapumeNote {
   trackNo: number;
-  pitch: number;     // MIDI 音高，中央 C = 60
-  startTime: number; // 毫秒
-  duration: number;  // 毫秒
-  srcStart: number;  // 源字符起始下标（用于高亮）
+  pitch: number;     // ${z ? 'MIDI 音高，中央 C = 60' : 'MIDI pitch, middle C = 60'}
+  startTime: number; // ${z ? '毫秒' : 'milliseconds'}
+  duration: number;  // ${z ? '毫秒' : 'milliseconds'}
+  srcStart: number;  // ${z ? '源字符起始下标（用于高亮）' : 'source char start index (for highlighting)'}
   srcEnd: number;
   isChord: boolean;
 }
 
 interface DapumeSection {
-  startTime: number; // 该段起始时刻（毫秒）
-  tonic: number;     // 主音 MIDI
+  startTime: number; // ${z ? '该段起始时刻（毫秒）' : 'section start time (ms)'}
+  tonic: number;     // ${z ? '主音 MIDI' : 'tonic MIDI pitch'}
   bpm: number;
-  key: string;       // 调号标签，如 "C"、"Bb."
+  key: string;       // ${z ? '调号标签，如 "C"、"Bb."' : 'key label, e.g. "C", "Bb."'}
 }`;
+};
 
 /** HTTP 接口的一行说明：方法 + 路径 + 请求/响应内容类型。 */
 function EndpointRow(props: {
@@ -192,27 +215,27 @@ export default function Developers() {
 
         <div class="mt-6">
           <Section title={t('dev.installTitle')} desc={t('dev.installDesc')}>
-            <CodeBlock code={INSTALL} lang="bash" />
+            <CodeBlock code={INSTALL(locale())} lang="bash" />
           </Section>
 
           <Section title={t('dev.apiTitle')} desc={t('dev.apiDesc')}>
-            <CodeBlock code={API} />
+            <CodeBlock code={API(locale())} />
           </Section>
 
           <Section title={t('dev.nodeTitle')} desc={t('dev.nodeDesc')}>
-            <CodeBlock code={NODE} />
+            <CodeBlock code={NODE(locale())} />
           </Section>
 
           <Section title={t('dev.browserTitle')} desc={t('dev.browserDesc')}>
-            <CodeBlock code={BROWSER} />
+            <CodeBlock code={BROWSER(locale())} />
           </Section>
 
           <Section title={t('dev.moreTitle')} desc={t('dev.moreDesc')}>
-            <CodeBlock code={MORE} />
+            <CodeBlock code={MORE(locale())} />
           </Section>
 
           <Section title={t('dev.typesTitle')}>
-            <CodeBlock code={TYPES} />
+            <CodeBlock code={TYPES(locale())} />
           </Section>
 
           <Section title={t('dev.httpTitle')} desc={t('dev.httpDesc')}>

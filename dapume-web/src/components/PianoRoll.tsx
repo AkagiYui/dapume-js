@@ -16,10 +16,18 @@ export interface PianoRollProps {
   isPlaying: boolean;
   /** 是否跟随播放进度自动滚动。 */
   follow: boolean;
-  /** 音高轴方向：false=从高到低（默认，高音在起点）；true=从低到高。 */
+  /**
+   * 「琴键方向」开关原始状态。OFF（false，默认）：横向 下→上 低→高、纵向 左→右 低→高；
+   * ON（true）：横向 下→上 高→低、纵向 左→右 高→低。
+   */
   pitchAscending?: boolean;
   /** 卷帘朝向：'horizontal'（默认，时间横向）| 'vertical'（时间纵向）。 */
   orientation?: 'horizontal' | 'vertical';
+  /**
+   * 「琴键位置」开关原始状态。OFF（false，默认）：横向键盘在左、纵向键盘在底；
+   * ON（true）：横向键盘在右、纵向键盘在顶。
+   */
+  keyboardFlip?: boolean;
 }
 
 /** 左侧键盘宽度（CSS px）。 */
@@ -73,33 +81,42 @@ export function PianoRoll(props: PianoRollProps) {
     ctx.fillRect(0, 0, cssW, cssH);
 
     const vertical = props.orientation === 'vertical';
-    const asc = !!props.pitchAscending;
+    // 高音是否在音高轴起点（横向=顶部、纵向=左侧）：纵向时与开关同向、横向时相反
+    const highAtCoord0 = vertical ? !!props.pitchAscending : !props.pitchAscending;
+    // 键盘是否在时间轴起点（横向=左、纵向=顶）：纵向时与开关同向、横向时相反
+    const kbAtStart = vertical ? !!props.keyboardFlip : !props.keyboardFlip;
 
     const { lo, hi } = pitchRange();
     const rows = hi - lo + 1;
-    const timeAxisLen = vertical ? cssH : cssW; // 时间轴总长（含左/上键盘）
+    const timeAxisLen = vertical ? cssH : cssW; // 时间轴总长（含键盘）
     const pitchAxisLen = vertical ? cssW : cssH; // 音高轴总长
     const cell = pitchAxisLen / rows; // 每个半音的宽/高
     const noteAreaTime = timeAxisLen - KEYBOARD_W; // 时间轴上音符区长度
+
+    const naLo = kbAtStart ? KEYBOARD_W : 0; // 音符区时间坐标下界
+    const naHi = naLo + noteAreaTime; // 上界
+    const keyBodyStart = kbAtStart ? 0 : naHi + 6; // 键本体起点（与音符区间隔 6px）
+    const keyBodyLen = KEYBOARD_W - 6;
+    const kbBorder = kbAtStart ? KEYBOARD_W : naHi; // 键盘与音符区的分隔线
+
     const visibleMs = noteAreaTime / pxPerMs;
     const maxScroll = Math.max(0, props.durationMs - visibleMs);
 
     // 计算滚动位置。仅在「跟随 且 正在播放」时自动跟随；其余情况允许手动平移。
-    // 这样开启跟随但处于停止/暂停态时，仍可拖动查看谱面；播放时恢复自动跟随。
     const autoFollow = props.follow && props.isPlaying;
     let scrollX: number;
     if (autoFollow) {
       const anchor = visibleMs * 0.4;
       scrollX = clamp(props.currentTimeMs - anchor, 0, maxScroll);
-      userScrollX = scrollX; // 同步，便于暂停后从当前位置继续手动平移
+      userScrollX = scrollX;
     } else {
       scrollX = clamp(userScrollX, 0, maxScroll);
       userScrollX = scrollX;
     }
 
-    // 逻辑坐标：tPos 沿时间轴（含起点 KEYBOARD_W 键盘）、pPos 沿音高轴
-    const tPos = (t: number) => KEYBOARD_W + (t - scrollX) * pxPerMs;
-    const pPos = (p: number) => (asc ? p - lo : hi - p) * cell;
+    // 逻辑坐标：tPos 沿时间轴（音符区从 naLo 开始）、pPos 沿音高轴
+    const tPos = (t: number) => naLo + (t - scrollX) * pxPerMs;
+    const pPos = (p: number) => (highAtCoord0 ? hi - p : p - lo) * cell;
     // 逻辑矩形（沿时间 [t0,tLen]、沿音高 [p0,pLen]）→ 屏幕矩形
     const fillRect = (t0: number, tLen: number, p0: number, pLen: number) => {
       if (vertical) ctx.fillRect(p0, t0, pLen, tLen);
@@ -126,7 +143,7 @@ export function PianoRoll(props: PianoRollProps) {
     for (let p = lo; p <= hi; p++) {
       if (BLACK_KEYS.has(((p % 12) + 12) % 12)) {
         ctx.fillStyle = `color-mix(in oklch, ${mutedFg} 12%, transparent)`;
-        fillRect(KEYBOARD_W, noteAreaTime, pPos(p), cell);
+        fillRect(naLo, noteAreaTime, pPos(p), cell);
       }
     }
 
@@ -139,19 +156,19 @@ export function PianoRoll(props: PianoRollProps) {
     const endSec = Math.ceil((scrollX + visibleMs) / 1000);
     for (let s = startSec; s <= endSec; s++) {
       const tc = tPos(s * 1000);
-      if (tc < KEYBOARD_W) continue;
+      if (tc < naLo || tc > naHi) continue;
       lineAcrossPitch(tc);
       if (vertical) ctx.fillText(`${s}s`, 2, tc + 11);
       else ctx.fillText(`${s}s`, tc + 3, 11);
     }
 
-    // 音符
+    // 音符（裁剪到音符区 [naLo, naHi]）
     for (const n of props.notes) {
       const t0 = tPos(n.startTime);
-      const tLen = Math.max(1.5, n.duration * pxPerMs);
-      if (t0 + tLen < KEYBOARD_W || t0 > timeAxisLen) continue;
-      const drawT = Math.max(t0, KEYBOARD_W);
-      const drawTLen = t0 + tLen - drawT;
+      const tFull = Math.max(1.5, n.duration * pxPerMs);
+      if (t0 + tFull < naLo || t0 > naHi) continue;
+      const drawT = Math.max(t0, naLo);
+      const drawTLen = Math.min(t0 + tFull, naHi) - drawT;
       if (drawTLen <= 0) continue;
       const p0 = pPos(n.pitch);
       const active =
@@ -165,42 +182,33 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
-    // 键盘（横向时在左侧、纵向时在顶部）：先以 bg 覆盖键盘区
+    // 键盘：先以 bg 覆盖键盘区（时间轴上 KEYBOARD_W 宽、全音高轴）
     ctx.fillStyle = bg;
-    if (vertical) ctx.fillRect(0, 0, cssW, KEYBOARD_W);
-    else ctx.fillRect(0, 0, KEYBOARD_W, cssH);
+    fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
     for (let p = lo; p <= hi; p++) {
       const p0 = pPos(p);
       const isBlack = BLACK_KEYS.has(((p % 12) + 12) % 12);
       ctx.fillStyle = isBlack ? `color-mix(in oklch, ${fg} 82%, ${bg})` : bg;
-      fillRect(0, KEYBOARD_W - 6, p0, cell);
+      fillRect(keyBodyStart, keyBodyLen, p0, cell);
       ctx.strokeStyle = `color-mix(in oklch, ${border} 60%, transparent)`;
-      strokeRect(0.5, KEYBOARD_W - 6, p0 + 0.5, cell);
+      strokeRect(keyBodyStart + 0.5, keyBodyLen, p0 + 0.5, cell);
       // 每个 C 标注音名
       if (((p % 12) + 12) % 12 === 0) {
         ctx.fillStyle = mutedFg;
         ctx.font = '9px ui-sans-serif, system-ui';
         const label = `C${Math.floor(p / 12) - 1}`;
-        if (vertical) ctx.fillText(label, p0 + 1, KEYBOARD_W - 3);
-        else ctx.fillText(label, 2, p0 + cell - 2);
+        if (vertical) ctx.fillText(label, p0 + 1, keyBodyStart + keyBodyLen - 2);
+        else ctx.fillText(label, keyBodyStart + 2, p0 + cell - 2);
       }
     }
-    // 键盘边界线
+    // 键盘与音符区的分隔线
     ctx.strokeStyle = border;
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    if (vertical) {
-      ctx.moveTo(0, KEYBOARD_W + 0.5);
-      ctx.lineTo(cssW, KEYBOARD_W + 0.5);
-    } else {
-      ctx.moveTo(KEYBOARD_W + 0.5, 0);
-      ctx.lineTo(KEYBOARD_W + 0.5, cssH);
-    }
-    ctx.stroke();
+    lineAcrossPitch(kbBorder);
 
     // 播放指针
     const tc = tPos(props.currentTimeMs);
-    if (tc >= KEYBOARD_W && tc <= timeAxisLen) {
+    if (tc >= naLo && tc <= naHi) {
       ctx.strokeStyle = primary;
       ctx.lineWidth = 2;
       lineAcrossPitch(tc);
@@ -256,6 +264,7 @@ export function PianoRoll(props: PianoRollProps) {
     void props.durationMs;
     void props.orientation; // 卷帘朝向切换后重绘
     void props.pitchAscending; // 音高方向切换后重绘
+    void props.keyboardFlip; // 键盘位置切换后重绘
     void isDark(); // 深浅色切换后重绘，使画布配色同步更新
     void themeColor(); // 主题色切换后重绘（播放指针颜色）
     draw();

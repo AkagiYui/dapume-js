@@ -118,6 +118,7 @@ export const en: typeof zh = {
     pianoRollTitle: 'Piano roll',
     pianoOrientation: 'Roll orientation (horizontal / vertical)',
     pianoKeyDir: 'Key direction (high ↔ low)',
+    pianoKeyboardPos: 'Keyboard position (left·bottom ↔ right·top)',
     loadingPiano: 'Loading piano samples…',
     pianoReady: 'Samples ready',
     audioError: 'Failed to load samples, check your network',

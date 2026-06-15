@@ -155,6 +155,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   createEffect(() => lsSet('dapume.pianoAsc', String(pianoAsc())));
   const [pianoVertical, setPianoVertical] = createSignal(lsGet('dapume.pianoVertical', 'false') === 'true');
   createEffect(() => lsSet('dapume.pianoVertical', String(pianoVertical())));
+  // 键盘位置：OFF=横向在左/纵向在底；ON=横向在右/纵向在顶
+  const [pianoKbFlip, setPianoKbFlip] = createSignal(lsGet('dapume.pianoKbFlip', 'false') === 'true');
+  createEffect(() => lsSet('dapume.pianoKbFlip', String(pianoKbFlip())));
 
   // ===== 窄屏适配 =====
   const narrowMedia = window.matchMedia('(max-width: 768px)');
@@ -421,6 +424,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         follow={follow()}
         pitchAscending={pianoAsc()}
         orientation={pianoVertical() ? 'vertical' : 'horizontal'}
+        keyboardFlip={pianoKbFlip()}
       />
     </Show>
   );
@@ -464,6 +468,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           onChange={setPianoAsc}
           icon="lucide:arrow-down-up"
           label={t('workbench.pianoKeyDir')}
+        />
+        <MiniSwitch
+          checked={pianoKbFlip()}
+          onChange={setPianoKbFlip}
+          icon="lucide:between-vertical-start"
+          label={t('workbench.pianoKeyboardPos')}
         />
       </div>
       <Show when={pianoState() === 'loading'}>

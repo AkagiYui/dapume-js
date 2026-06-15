@@ -8,6 +8,7 @@ import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { t } from '~/i18n';
 import { downloadBytes } from '~/lib/download';
+import { highlightCode } from '~/lib/highlight';
 
 const SAMPLE = '1=C 120bpm\n1234567';
 
@@ -99,7 +100,11 @@ export function ApiTester() {
               </Match>
               <Match when={r().kind === 'json'}>
                 <pre class="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs leading-relaxed">
-                  {(r() as Extract<Result, { kind: 'json' }>).text}
+                  {/* highlightCode 已转义内容，innerHTML 安全 */}
+                  <code
+                    class="hljs bg-transparent p-0"
+                    innerHTML={highlightCode((r() as Extract<Result, { kind: 'json' }>).text, 'json')}
+                  />
                 </pre>
               </Match>
               <Match when={r().kind === 'midi'}>
