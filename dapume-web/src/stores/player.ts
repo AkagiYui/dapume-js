@@ -5,8 +5,8 @@
  * 以获得真实的钢琴音色。负责：加载音色、按绝对时间调度音符、维护播放进度信号。
  */
 import { createSignal } from 'solid-js';
-import { CacheStorage, SplendidGrandPiano } from 'smplr';
 import type { DapumeNote } from 'dapume-js';
+// 注意：smplr 在 ensurePiano() 中动态导入，避免其进入 SSR/预渲染的模块图。
 
 /** 播放器对外暴露的音色加载状态。 */
 export type PianoState = 'idle' | 'loading' | 'ready' | 'error';
@@ -50,21 +50,24 @@ export function ensurePiano(): Promise<Instrument> {
   if (pianoLoad) return pianoLoad;
   setPianoState('loading');
   setLoadProgress(0);
+  // 动态导入 smplr（仅客户端）。
   // storage: 用 CacheStorage（基于浏览器 Cache API）缓存采样，刷新后不再重复下载；
   //          非安全上下文（非 https/localhost）会自动回退为普通网络请求。
   // onLoadProgress: 上报加载进度，供 UI 显示。
-  const instrument = new SplendidGrandPiano(getCtx(), {
-    storage: CacheStorage(),
-    onLoadProgress: (p: { loaded: number; total: number }) => {
-      setLoadProgress(p.total > 0 ? p.loaded / p.total : 0);
-    },
-  }) as unknown as Instrument;
-  piano = instrument;
-  pianoLoad = instrument.ready
-    .then(() => {
-      setLoadProgress(1);
-      setPianoState('ready');
-      return instrument;
+  pianoLoad = import('smplr')
+    .then(({ SplendidGrandPiano, CacheStorage }) => {
+      const instrument = new SplendidGrandPiano(getCtx(), {
+        storage: CacheStorage(),
+        onLoadProgress: (p: { loaded: number; total: number }) => {
+          setLoadProgress(p.total > 0 ? p.loaded / p.total : 0);
+        },
+      }) as unknown as Instrument;
+      piano = instrument;
+      return instrument.ready.then(() => {
+        setLoadProgress(1);
+        setPianoState('ready');
+        return instrument;
+      });
     })
     .catch((err) => {
       setPianoState('error');

@@ -23,6 +23,22 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.21)(jsdom@25.0.1)(vite@8.0.16(@types/node@22.19.21)(jiti@2.7.0))
 
+  dapume-vscode:
+    dependencies:
+      dapume-js:
+        specifier: workspace:*
+        version: link:../dapume-js
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.90.0
+        version: 1.120.0
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   dapume-web:
     dependencies:
       '@codemirror/commands':
@@ -804,6 +820,9 @@ packages:
 
   '@types/node@22.19.21':
     resolution: {integrity: sha512-VMeFBSCKQKmm2swI2kW51SFusDqekC6q9trBCvJ/JliDchFSuoYYKN7yVNjPthP1HKZcx3U1gI/wTcEBjEFKTA==}
+
+  '@types/vscode@1.120.0':
+    resolution: {integrity: sha512-feaT4Rst+FkTch5zz/ZbNCxoIvo55YU80Be2kiL7OJcod4+CUYf2lUBPdIJzozNnSEMq1VRTGrWEcCGFB3fBmA==}
 
   '@vitest/expect@4.1.8':
     resolution: {integrity: sha512-h3nDO677RDLEGlBxyQ5CW8RlMThSKSRLUePLOx09gNIWRL40edgA1GCZSZgf1W55MFAG6/Sw14KeaAnqv0NKdQ==}
@@ -2355,6 +2374,8 @@ snapshots:
   '@types/node@22.19.21':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/vscode@1.120.0': {}
 
   '@vitest/expect@4.1.8':
     dependencies:

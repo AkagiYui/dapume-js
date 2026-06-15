@@ -1,1 +1,4 @@
-/* /index.html 200
+# 预渲染（SSG）的路由优先返回各自的静态 HTML；其余路由回退到 SPA 外壳。
+/                 /index.html             200
+/developers       /developers/index.html  200
+/*                /index.html             200

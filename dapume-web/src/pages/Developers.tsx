@@ -12,6 +12,7 @@ import { ensurePiano } from '~/stores/player';
 
 const REPO_URL = 'https://github.com/AkagiYui/dapume-js';
 const PY_REPO_URL = 'https://github.com/ScarlettRinko/dapume';
+const NPMX_URL = 'https://npmx.dev/package/dapume-js';
 /** shields.io 徽章（发布后自动显示实时数据）。 */
 const BADGES = [
   { src: 'https://img.shields.io/npm/v/dapume-js?logo=npm&color=%23cb3837', alt: 'npm version' },
@@ -98,10 +99,14 @@ export default function Developers() {
         <h1 class="text-3xl font-extrabold tracking-tight">{t('dev.title')}</h1>
         <p class="mt-3 max-w-2xl text-muted-foreground">{t('dev.subtitle')}</p>
 
-        {/* 徽章 */}
+        {/* 徽章（链接到 npm 包页面） */}
         <div class="mt-4 flex flex-wrap items-center gap-2">
           <For each={BADGES}>
-            {(b) => <img src={b.src} alt={b.alt} class="h-5" loading="lazy" />}
+            {(b) => (
+              <a href={NPMX_URL} target="_blank" rel="noreferrer" class="inline-flex">
+                <img src={b.src} alt={b.alt} class="h-5" loading="lazy" />
+              </a>
+            )}
           </For>
         </div>
 

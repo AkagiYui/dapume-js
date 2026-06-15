@@ -3,6 +3,7 @@
  * 均以信号实现，并持久化到 localStorage；深浅色默认跟随系统。
  */
 import { createEffect, createRoot, createSignal, onCleanup } from 'solid-js';
+import { isServer } from 'solid-js/web';
 
 export type ThemeChoice = 'light' | 'dark' | 'system';
 export type Locale = 'zh' | 'en';
@@ -15,8 +16,9 @@ const KEY_THEME = 'dapume.theme';
 const KEY_COLOR = 'dapume.themeColor';
 const KEY_LOCALE = 'dapume.locale';
 
-/** 安全读取 localStorage。 */
+/** 安全读取 localStorage（SSR 时返回 null）。 */
 function read(key: string): string | null {
+  if (isServer) return null;
   try {
     return localStorage.getItem(key);
   } catch {
@@ -24,8 +26,9 @@ function read(key: string): string | null {
   }
 }
 
-/** 安全写入 localStorage。 */
+/** 安全写入 localStorage（SSR 时忽略）。 */
 function write(key: string, value: string): void {
+  if (isServer) return;
   try {
     localStorage.setItem(key, value);
   } catch {
@@ -33,7 +36,10 @@ function write(key: string, value: string): void {
   }
 }
 
-const media = window.matchMedia('(prefers-color-scheme: dark)');
+// SSR 时 window 不存在，用一个惰性的占位对象避免崩溃。
+const media: MediaQueryList = isServer
+  ? ({ matches: false, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList)
+  : window.matchMedia('(prefers-color-scheme: dark)');
 
 // ===== 深浅色 =====
 function initTheme(): ThemeChoice {
@@ -52,7 +58,7 @@ const [dark, setDark] = createSignal(resolveDark(initTheme()));
 /** 计算并应用 .dark 类，同时更新响应式 dark 信号。 */
 function applyTheme(choice: ThemeChoice): void {
   const d = resolveDark(choice);
-  document.documentElement.classList.toggle('dark', d);
+  if (!isServer) document.documentElement.classList.toggle('dark', d);
   setDark(d);
 }
 
@@ -73,6 +79,7 @@ const [themeColor, setThemeColor] = createSignal<ThemeColor>(initColor());
 function initLocale(): Locale {
   const v = read(KEY_LOCALE);
   if (v === 'zh' || v === 'en') return v;
+  if (isServer) return 'zh'; // 与 index.html 的 <html lang="zh-CN"> 一致；客户端挂载时再按 navigator 重新解析
   return navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
@@ -97,6 +104,7 @@ createRoot(() => {
   createEffect(() => {
     const c = themeColor();
     write(KEY_COLOR, c);
+    if (isServer) return;
     if (c === 'default') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', c);
   });

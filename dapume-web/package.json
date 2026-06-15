@@ -6,7 +6,7 @@
   "description": "打谱么 Web —— 基于 dapume-js 的纯前端线性乐谱编辑与播放应用",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node prerender.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

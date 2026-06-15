@@ -19,30 +19,55 @@ interface Group {
   parts: Part[];
 }
 
-/** 按「词法单元边界 + 高亮边界」切分文本，再把连续的高亮片段合并为一组。 */
+/**
+ * 按「词法单元边界 + 高亮边界」切分文本，并按「所属的高亮范围」分组。
+ * 同一个音符（及其修饰符）合并为一个框；相邻但属于不同音符（例如和弦与旋律音）
+ * 的高亮分属不同范围，会被分成各自独立的框——与工作台编辑器行为一致。
+ */
 function buildGroups(code: string, highlights: { from: number; to: number }[]): Group[] {
   const tokens = tokenize(code);
+  // 去重高亮范围（和弦的多个音共享同一段源码，归为同一范围）
+  const uniq: { from: number; to: number }[] = [];
+  const seen = new Set<string>();
+  for (const h of highlights) {
+    const from = Math.max(0, Math.min(h.from, code.length));
+    const to = Math.max(0, Math.min(h.to, code.length));
+    if (to <= from) continue;
+    const key = `${from}:${to}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniq.push({ from, to });
+    }
+  }
+
   const points = new Set<number>([0, code.length]);
   for (const tk of tokens) {
     points.add(tk.start);
     points.add(tk.end);
   }
-  for (const h of highlights) {
-    points.add(Math.max(0, Math.min(h.from, code.length)));
-    points.add(Math.max(0, Math.min(h.to, code.length)));
+  for (const r of uniq) {
+    points.add(r.from);
+    points.add(r.to);
   }
   const sorted = [...points].sort((a, b) => a - b);
+
   const groups: Group[] = [];
+  let curKey = -2; // 哨兵：与任何范围下标都不同
   for (let i = 0; i < sorted.length - 1; i++) {
     const a = sorted[i]!;
     const b = sorted[i + 1]!;
     if (a >= b) continue;
     const tk = tokens.find((t) => t.start <= a && t.end >= b);
-    const hl = highlights.some((h) => h.from <= a && h.to >= b);
+    // 该片段所属的高亮范围下标（-1 表示不在任何高亮范围内）
+    const rangeKey = uniq.findIndex((r) => r.from <= a && r.to >= b);
     const part: Part = { text: code.slice(a, b), cls: tk ? TOKEN_CLASS[tk.type] : undefined };
-    const last = groups[groups.length - 1];
-    if (last && last.hl === hl) last.parts.push(part);
-    else groups.push({ hl, parts: [part] });
+    // 范围下标变化即另起一组（不同音符各自成框）
+    if (rangeKey !== curKey) {
+      groups.push({ hl: rangeKey >= 0, parts: [part] });
+      curKey = rangeKey;
+    } else {
+      groups[groups.length - 1]!.parts.push(part);
+    }
   }
   return groups;
 }

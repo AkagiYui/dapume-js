@@ -5,6 +5,6 @@
 import { Icon as IconifyIcon } from '@iconify-icon/solid';
 import type { JSX } from 'solid-js';
 
-export function Icon(props: { icon: string; class?: string }): JSX.Element {
-  return <IconifyIcon icon={props.icon} class={props.class} />;
+export function Icon(props: { icon: string; class?: string; title?: string }): JSX.Element {
+  return <IconifyIcon icon={props.icon} class={props.class} title={props.title} />;
 }

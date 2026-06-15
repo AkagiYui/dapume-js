@@ -1,0 +1,50 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Dapume",
+  "scopeName": "source.dapume",
+  "patterns": [
+    {
+      "comment": "调号参数，如 1=C、1=Bb.",
+      "match": "1=[CDEFGAB][#b.,]*",
+      "name": "entity.name.function.key.dapume"
+    },
+    {
+      "comment": "速度参数，如 120bpm",
+      "match": "\\d+bpm",
+      "name": "constant.numeric.bpm.dapume"
+    },
+    {
+      "comment": "和弦记号 [...]（整体）",
+      "begin": "\\[",
+      "end": "\\]",
+      "name": "string.interpolated.chord.dapume",
+      "beginCaptures": { "0": { "name": "punctuation.definition.chord.begin.dapume" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.chord.end.dapume" } }
+    },
+    {
+      "comment": "休止符",
+      "match": "0",
+      "name": "comment.line.rest.dapume"
+    },
+    {
+      "comment": "音符 1~7",
+      "match": "[1-7]",
+      "name": "constant.numeric.note.dapume"
+    },
+    {
+      "comment": "音高修饰符：升降半音 / 升降八度",
+      "match": "[#b.,]",
+      "name": "keyword.operator.pitch.dapume"
+    },
+    {
+      "comment": "时值修饰符",
+      "match": "[-~=+*^']",
+      "name": "keyword.operator.duration.dapume"
+    },
+    {
+      "comment": "多轨括号",
+      "match": "[()]",
+      "name": "punctuation.definition.bracket.dapume"
+    }
+  ]
+}

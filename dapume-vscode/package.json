@@ -1,0 +1,68 @@
+{
+  "name": "dapume-vscode",
+  "displayName": "Dapume",
+  "description": "dapume 线性乐谱（.dapume）的语法高亮与「渲染为 MIDI」命令。",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "publisher": "AkagiYui",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Programming Languages"],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "dapume",
+        "aliases": ["Dapume", "dapume"],
+        "extensions": [".dapume", ".dpm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "dapume",
+        "scopeName": "source.dapume",
+        "path": "./syntaxes/dapume.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "dapume.renderMidi",
+        "title": "Dapume: 渲染为 MIDI",
+        "icon": "$(file-media)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "dapume.renderMidi",
+          "when": "resourceExtname == .dapume || resourceExtname == .dpm",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "dapume.renderMidi",
+          "when": "resourceExtname == .dapume || resourceExtname == .dpm"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "dapume-js": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3"
+  }
+}

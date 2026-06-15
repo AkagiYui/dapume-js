@@ -3,3 +3,4 @@
 packages:
   - 'dapume-js'
   - 'dapume-web'
+  - 'dapume-vscode'
