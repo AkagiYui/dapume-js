@@ -14,17 +14,17 @@ jobs:
   publish:
     runs-on: ubuntu-latest # 可信发布仅支持 GitHub 托管的 runner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: 'latest'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Enable pnpm (corepack)
         run: corepack enable
 
-      # 可信发布需要 npm >= 11.5.1，而 Node 22 自带的 npm 版本偏低，需升级。
+      # 可信发布需要 npm >= 11.5.1。最新版 Node 一般已自带满足要求的 npm，这里仍显式升级以确保万无一失。
       - name: Upgrade npm
         run: npm install -g npm@latest
 

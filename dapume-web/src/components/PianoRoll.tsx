@@ -75,11 +75,14 @@ export function PianoRoll(props: PianoRollProps) {
     const visibleMs = noteAreaW / pxPerMs;
     const maxScroll = Math.max(0, props.durationMs - visibleMs);
 
-    // 计算滚动位置
+    // 计算滚动位置。仅在「跟随 且 正在播放」时自动跟随；其余情况允许手动平移。
+    // 这样开启跟随但处于停止/暂停态时，仍可拖动查看谱面；播放时恢复自动跟随。
+    const autoFollow = props.follow && props.isPlaying;
     let scrollX: number;
-    if (props.follow) {
+    if (autoFollow) {
       const anchor = visibleMs * 0.4;
       scrollX = clamp(props.currentTimeMs - anchor, 0, maxScroll);
+      userScrollX = scrollX; // 同步，便于暂停后从当前位置继续手动平移
     } else {
       scrollX = clamp(userScrollX, 0, maxScroll);
       userScrollX = scrollX;
@@ -194,8 +197,8 @@ export function PianoRoll(props: PianoRollProps) {
       // 缩放
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       pxPerMs = clamp(pxPerMs * factor, 0.01, 2);
-    } else if (!props.follow) {
-      // 平移（跟随模式下禁用手动平移）
+    } else if (!(props.follow && props.isPlaying)) {
+      // 平移（仅在「跟随且正在播放」时禁用，其余情况允许）
       const delta = (e.deltaY + e.deltaX) / pxPerMs;
       userScrollX = Math.max(0, userScrollX + delta);
     }
@@ -215,6 +218,7 @@ export function PianoRoll(props: PianoRollProps) {
     void props.currentTimeMs;
     void props.notes;
     void props.follow;
+    void props.isPlaying; // 播放/暂停切换时重绘，切换自动跟随/手动平移
     void props.durationMs;
     void isDark(); // 深浅色切换后重绘，使画布配色同步更新
     void themeColor(); // 主题色切换后重绘（播放指针颜色）

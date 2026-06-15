@@ -1,5 +1,6 @@
-# 预渲染（SSG）的路由优先返回各自的静态 HTML；
-# 其余路由（如 /workbench）回退到空壳 spa.html，避免先看到首页内容。
-/                 /index.html             200
-/developers       /developers/index.html  200
-/*                /spa.html               200
+# SPA 回退：未命中静态文件的请求返回 index.html（由客户端路由接管）。
+# 预渲染的 / 与 /developers 是真实静态文件，会被优先直接返回。
+# 注意：必须用 index.html 作为回退目标——它是 SPA 入口、被特殊处理；
+# 若用其它 *.html（如 spa.html），Cloudflare 会把它 308 跳到去掉 .html 的干净 URL，
+# 从而与本规则形成无限重定向。
+/* /index.html 200
