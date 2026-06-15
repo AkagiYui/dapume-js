@@ -115,6 +115,10 @@
   #root {
     height: 100%;
   }
+  /* 始终预留滚动条槽位：页面间切换（内容有/无滚动条）时不再产生水平 layout shift */
+  html {
+    scrollbar-gutter: stable;
+  }
 }
 
 /* ===== CodeMirror dapume 语法高亮 ===== */

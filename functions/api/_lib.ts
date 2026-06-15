@@ -72,7 +72,9 @@ export async function withBodyCache(
   const body = await ctx.request.clone().text();
   const hash = await sha256hex(body);
   const cacheKey = new Request(`https://dapume.cache/${routeKey}/${hash}`, { method: 'GET' });
-  // Workers 专有：caches.default（DOM 类型里没有，运行时存在）
+  // caches.default 即 Cloudflare 的边缘缓存（与 CDN 同一套缓存，按 colo 分布）。
+  // Pages Functions 运行在 Workers 运行时，生产环境可用；这里直接读写它，而非仅靠 Cache-Control。
+  // Cache-Control 的 s-maxage 仅用作该缓存条目的 TTL。（context 上并没有独立的缓存对象。）
   const cache = (caches as unknown as { default: Cache }).default;
 
   const hit = await cache.match(cacheKey);
