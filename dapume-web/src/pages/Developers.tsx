@@ -24,7 +24,9 @@ const BADGES = [
   { src: 'https://img.shields.io/npm/l/dapume-js?color=%236366f1', alt: 'license', href: NPMX_URL },
   { src: 'https://img.shields.io/bundlephobia/minzip/dapume-js?label=minzip', alt: 'bundle size', href: NPMX_URL },
   {
-    src: 'https://img.shields.io/visual-studio-marketplace/v/AkagiYui.dapume-vscode?logo=visualstudiocode&label=vscode&color=%23007ACC',
+    // shields.io 与 vsmarketplacebadges.dev 的「实时版本」徽章因 Marketplace API 停用已失效，
+    // 改用始终可用的静态徽章（点击跳转到 Marketplace 列表页）。
+    src: 'https://img.shields.io/badge/VS%20Marketplace-dapume--vscode-007ACC?logo=visualstudiocode&logoColor=white',
     alt: 'vscode marketplace',
     href: MARKETPLACE_URL,
   },

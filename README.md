@@ -36,14 +36,13 @@ pnpm dev:web      # 启动 dapume-web 开发服务器
 | `ci.yaml` | push / PR | 构建 + 类型检查 + 测试整个工作区 |
 | `package-publish.yaml` | 推送 `v[0-9]*` tag | 经 npm OIDC 可信发布 dapume-js，并创建 GitHub Release |
 | `vscode-extension.yaml` | 扩展相关内容变动 | 打包 `.vsix` 并上传为构建产物 |
-| `vscode-publish.yaml` | 推送 `vscode-v*` tag | 经 Microsoft Entra OIDC（免 PAT）发布扩展到 VS Code Marketplace |
+| `vscode-publish.yaml` | 推送 `vscode-v*` tag | 用 PAT 发布扩展到 VS Code Marketplace |
 
 > 发布 dapume-js：在 `dapume-js/package.json` 升级 `version` → 提交 → 推送匹配的 `vX.Y.Z` tag。
 >
 > 发布扩展：在 `dapume-vscode/package.json` 升级 `version` → 提交 → 推送匹配的 `vscode-vX.Y.Z` tag。
-> 首次需在 Azure 建「用户分配的托管标识」并配置 GitHub 联合凭据、将其加为 Marketplace 发布者成员，
-> 并在 GitHub 建 `vscode-marketplace` 环境与 `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` 变量
-> （详见 `.github/workflows/vscode-publish.yaml` 顶部注释）。
+> 首次需在 [dev.azure.com](https://dev.azure.com) 创建带「Marketplace → Manage」权限的 PAT，
+> 并在 GitHub 仓库加 `VSCE_PAT` 机密（详见 `.github/workflows/vscode-publish.yaml` 顶部注释）。
 
 ## 部署
 

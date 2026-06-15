@@ -2,18 +2,21 @@ name: Publish VSCode Extension
 
 # 推送形如 vscode-v0.1.0 的 tag 时触发：构建并发布到 VS Code Marketplace。
 #
-# 采用 Microsoft Entra ID + 工作负载身份联合（OIDC）「免 PAT」发布：
-# GitHub 颁发 OIDC 令牌 → azure/login 联合登录为「用户分配的托管标识」→
-# vsce 用该 Entra 凭据换取 Marketplace 令牌并发布。无任何长期机密。
-# （Azure DevOps 全局 PAT 将于 2026-12-01 停用，故弃用 PAT 方式。）
+# 采用 Personal Access Token（PAT）方式——对个人开发者最易上手、无需 Azure 订阅。
+# （Entra/OIDC「免 PAT」方式需要在 Azure 订阅下创建托管标识，个人账号通常没有订阅，
+#  且 vsce --azure-credential 对服务主体仍有未决问题，故暂用 PAT；PAT 至 2026-12-01 前有效。）
 #
-# 一次性前置配置见仓库 README / 本轮回复，简述：
-#   1. Azure 建「用户分配的托管标识」，记下 Client ID / Tenant ID；
-#   2. 给它加 GitHub 联合凭据：issuer=token.actions.githubusercontent.com，
-#      subject=repo:AkagiYui/dapume-js:environment:vscode-marketplace，
-#      audience=api://AzureADTokenExchange；
-#   3. 在 Marketplace 管理页把该托管标识加为发布者 AkagiYui 的成员；
-#   4. GitHub 建环境 vscode-marketplace，加仓库变量 AZURE_CLIENT_ID / AZURE_TENANT_ID。
+# 一次性前置配置（入口 URL 已核对）：
+#   1. 登录 https://dev.azure.com （用与发布者 AkagiYui 同一个 Microsoft 账号；
+#      若没有组织，会提示免费新建一个，按默认创建即可）。
+#      —— 注意：不是 manage.visualstudio.com（那是 VS 订阅门户，会提示「找不到订阅」）。
+#   2. 右上角头像旁 User settings → Personal access tokens，新建令牌：
+#        Organization 选「All accessible organizations」；
+#        Scopes 点「Show all scopes」→ 找到 Marketplace → 勾选 Manage；
+#      创建后复制令牌（只显示一次）。
+#   3. GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret，
+#      名称 VSCE_PAT，值为上面的令牌。
+#   （发布者管理页：https://marketplace.visualstudio.com/manage/publishers/AkagiYui）
 on:
   push:
     tags:
@@ -21,12 +24,10 @@ on:
 
 permissions:
   contents: read
-  id-token: write # 获取 GitHub OIDC 令牌以联合登录 Azure（免机密）
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: vscode-marketplace # 与联合凭据 subject 对应，并集中管理其变量
     steps:
       - uses: actions/checkout@v6
 
@@ -59,16 +60,9 @@ jobs:
       - name: Build extension
         run: pnpm --filter dapume-vscode build
 
-      # 通过 OIDC 联合凭据登录 Azure（无长期机密）。
-      # 仅为换取 Marketplace 令牌，托管标识无需任何订阅 RBAC 角色，故 allow-no-subscriptions。
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          allow-no-subscriptions: true
-
-      # 用 Entra 凭据发布：vsce 经 az 登录会话换取 Marketplace 令牌（--no-dependencies：依赖已由 tsdown 打包）。
+      # 发布到 Marketplace（--no-dependencies：依赖已由 tsdown 打包）。
       - name: Publish to VS Code Marketplace
         working-directory: dapume-vscode
-        run: npx -y @vscode/vsce publish --no-dependencies --azure-credential
+        run: npx -y @vscode/vsce publish --no-dependencies -p "$VSCE_PAT"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

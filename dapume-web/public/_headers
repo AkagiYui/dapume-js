@@ -1,0 +1,5 @@
+# Cloudflare Pages 响应头规则。
+# 构建产物（/assets/*）文件名带内容哈希指纹，内容一变文件名就变，故可永久强缓存。
+# HTML 不在此长缓存（沿用 Pages 默认 must-revalidate），始终取最新以引用新指纹资源。
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
