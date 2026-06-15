@@ -121,6 +121,13 @@
   }
 }
 
+/* 乐谱编辑/演奏页占满视口、自行管理内部滚动：取消视口滚动条槽位并禁止视口滚动，
+   避免 scrollbar-gutter 在该页造成右侧留白与横向滚动（由 Workbench 挂载时切换该类）。 */
+html.editor-page {
+  scrollbar-gutter: auto;
+  overflow: hidden;
+}
+
 /* ===== CodeMirror dapume 语法高亮 ===== */
 .cm-editor {
   height: 100%;

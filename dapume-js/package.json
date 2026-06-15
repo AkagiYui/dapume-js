@@ -1,6 +1,6 @@
 {
   "name": "dapume-js",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "打谱么 —— 将线性乐谱（dapume）解析为乐谱对象并渲染为 MIDI 文件。可在 Node 与浏览器环境运行。",
   "type": "module",
   "main": "./dist/index.cjs",

@@ -150,6 +150,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [sticky, setSticky] = createSignal(lsGet('dapume.sticky', 'true') === 'true');
   createEffect(() => lsSet('dapume.sticky', String(sticky())));
 
+  // 钢琴卷帘：音高方向（默认从高到低）与朝向（默认横向）
+  const [pianoAsc, setPianoAsc] = createSignal(lsGet('dapume.pianoAsc', 'false') === 'true');
+  createEffect(() => lsSet('dapume.pianoAsc', String(pianoAsc())));
+  const [pianoVertical, setPianoVertical] = createSignal(lsGet('dapume.pianoVertical', 'false') === 'true');
+  createEffect(() => lsSet('dapume.pianoVertical', String(pianoVertical())));
+
   // ===== 窄屏适配 =====
   const narrowMedia = window.matchMedia('(max-width: 768px)');
   const [isNarrow, setIsNarrow] = createSignal(narrowMedia.matches);
@@ -176,6 +182,11 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 进入工作台即预热钢琴音色
   ensurePiano().catch(() => {});
   onCleanup(() => stop());
+
+  // 编辑/演奏页占满视口、自行管理内部滚动：临时取消 html 的滚动条槽位与视口滚动，
+  // 避免 scrollbar-gutter（防 layout shift 用）在本页造成右侧留白与横向滚动
+  document.documentElement.classList.add('editor-page');
+  onCleanup(() => document.documentElement.classList.remove('editor-page'));
 
   // 「播放态」：正在播放，或已暂停（currentTimeMs > 0）。暂停时仍保留高亮与实时调号/速度。
   const playActive = createMemo(() => isPlaying() || currentTimeMs() > 0);
@@ -352,7 +363,23 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           {t('workbench.downloadDpm')}
         </Button>
       </div>
-      {/* 示例 */}
+      <Separator />
+      {/* 语法速查 */}
+      <div class="space-y-2">
+        <div class="text-xs font-medium text-muted-foreground">{t('workbench.quickRef')}</div>
+        <div class="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+          <For each={CHEAT}>
+            {(c) => (
+              <div class="flex items-baseline justify-between gap-2">
+                <code class="font-mono text-primary">{c.s}</code>
+                <span class="text-muted-foreground">{locale() === 'zh' ? c.zh : c.en}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+      <Separator />
+      {/* 示例（放在速查之后） */}
       <div class="space-y-2">
         <div class="text-xs font-medium text-muted-foreground">{t('workbench.examples')}</div>
         <div class="flex flex-wrap gap-1.5">
@@ -371,21 +398,6 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           <Button variant="ghost" size="sm" disabled={isPlaying()} onClick={() => setScoreText('')}>
             {t('workbench.clear')}
           </Button>
-        </div>
-      </div>
-      <Separator />
-      {/* 语法速查 */}
-      <div class="space-y-2">
-        <div class="text-xs font-medium text-muted-foreground">{t('workbench.quickRef')}</div>
-        <div class="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
-          <For each={CHEAT}>
-            {(c) => (
-              <div class="flex items-baseline justify-between gap-2">
-                <code class="font-mono text-primary">{c.s}</code>
-                <span class="text-muted-foreground">{locale() === 'zh' ? c.zh : c.en}</span>
-              </div>
-            )}
-          </For>
         </div>
       </div>
     </div>
@@ -407,20 +419,60 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         currentTimeMs={currentTimeMs()}
         isPlaying={isPlaying()}
         follow={follow()}
+        pitchAscending={pianoAsc()}
+        orientation={pianoVertical() ? 'vertical' : 'horizontal'}
       />
     </Show>
   );
 
-  /** 钢琴卷帘标题栏右侧信息（加载进度 + 操作提示）。 */
+  /** 标题栏用的紧凑开关（图标 + 小开关），高度不超过标题文字，不撑高标题栏。 */
+  const MiniSwitch = (p: {
+    checked: boolean;
+    onChange: (v: boolean) => void;
+    icon: string;
+    label: string;
+  }) => (
+    <Switch
+      checked={p.checked}
+      onChange={p.onChange}
+      class="flex items-center gap-1"
+      title={p.label}
+      aria-label={p.label}
+    >
+      <SwitchLabel class="flex text-muted-foreground">
+        <Icon icon={p.icon} />
+      </SwitchLabel>
+      <SwitchControl class="h-4 w-7">
+        <SwitchThumb class="size-3 data-[checked]:translate-x-3" />
+      </SwitchControl>
+    </Switch>
+  );
+
+  /** 钢琴卷帘标题栏右侧信息（朝向/琴键方向开关 + 加载进度 + 操作提示）。 */
   const PianoRollInfo = () => (
     <div class="flex items-center gap-3">
+      {/* 切换：卷帘朝向（横↔纵）与琴键方向（高↔低），放在操作提示左边 */}
+      <div class="flex items-center gap-2">
+        <MiniSwitch
+          checked={pianoVertical()}
+          onChange={setPianoVertical}
+          icon="lucide:flip-vertical-2"
+          label={t('workbench.pianoOrientation')}
+        />
+        <MiniSwitch
+          checked={pianoAsc()}
+          onChange={setPianoAsc}
+          icon="lucide:arrow-down-up"
+          label={t('workbench.pianoKeyDir')}
+        />
+      </div>
       <Show when={pianoState() === 'loading'}>
         <span class="flex items-center gap-1 text-xs text-muted-foreground">
           <Icon icon="lucide:loader-circle" class="animate-spin" />
           {t('workbench.loadingPiano')} {Math.round(loadProgress() * 100)}%
         </span>
       </Show>
-      <span class="text-xs text-muted-foreground">
+      <span class="hidden text-xs text-muted-foreground sm:inline">
         {locale() === 'zh' ? '滚轮平移 · Ctrl+滚轮缩放' : 'Wheel: pan · Ctrl+Wheel: zoom'}
       </span>
     </div>
@@ -554,6 +606,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
             open={pianoOpen()}
             onClose={() => setPianoOpen(false)}
             title={t('workbench.pianoRollTitle')}
+            headerRight={<PianoRollInfo />}
             class="h-[70dvh]"
           >
             <PianoRollBody />
@@ -570,7 +623,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       }
     >
       {/* ===== 宽屏：可拖动分栏（尺寸持久化）===== */}
-      <div class="h-screen w-screen overflow-hidden bg-background">
+      <div class="h-[100dvh] w-full overflow-hidden bg-background">
         <Resizable
           orientation="vertical"
           initialSizes={readSizes('dapume.layout.v', [0.6, 0.4])}

@@ -113,6 +113,8 @@ export const zh = {
     hintsTitle: '语法提示',
     controlsTitle: '操作',
     pianoRollTitle: '钢琴卷帘',
+    pianoOrientation: '卷帘朝向（横向 / 纵向）',
+    pianoKeyDir: '琴键方向（高音 ↔ 低音）',
     loadingPiano: '正在加载钢琴音色…',
     pianoReady: '音色就绪',
     audioError: '音色加载失败，请检查网络',
