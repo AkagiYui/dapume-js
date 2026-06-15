@@ -6,9 +6,9 @@
  * 相同请求体直接缓存。
  */
 import { parse, toMidi } from 'dapume-js';
-import { CORS, preflight, withBodyCache } from './_lib';
+import { preflight, withBodyCache } from './_lib';
 
-export const onRequestOptions = () => preflight();
+export const onRequestOptions = (context: { request: Request }) => preflight(context.request);
 
 export const onRequestPost = (context: { request: Request; waitUntil: (p: Promise<unknown>) => void }) =>
   withBodyCache(context, 'render', (body) => {
@@ -21,7 +21,6 @@ export const onRequestPost = (context: { request: Request; waitUntil: (p: Promis
         'X-Note-Count': String(score.notes.length),
         'X-Track-Count': String(score.trackCount),
         'X-Duration-Ms': String(score.durationMs),
-        ...CORS,
       },
     });
   });

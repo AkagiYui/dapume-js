@@ -1,0 +1,53 @@
+name: Publish VSCode Extension
+
+# 推送形如 vscode-v0.1.0 的 tag 时触发：构建并发布到 VS Code Marketplace。
+# 前置条件：在仓库 Secrets 中配置 VSCE_PAT（Azure DevOps 个人访问令牌，含 Marketplace「Manage」权限）。
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 'latest'
+
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 校验 tag 版本号与扩展 package.json 一致（tag 去掉 vscode-v 前缀）
+      - name: Verify tag matches extension version
+        working-directory: dapume-vscode
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG=${GITHUB_REF_NAME#vscode-v}
+          echo "tag=$TAG package=$PKG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match dapume-vscode version $PKG"
+            exit 1
+          fi
+
+      # 先构建依赖库，再构建扩展（扩展会把 dapume-js 打包进产物）。
+      - name: Build dapume-js
+        run: pnpm --filter dapume-js build
+
+      - name: Build extension
+        run: pnpm --filter dapume-vscode build
+
+      # 发布到 Marketplace（--no-dependencies：依赖已由 tsdown 打包）。
+      - name: Publish to VS Code Marketplace
+        working-directory: dapume-vscode
+        run: npx -y @vscode/vsce publish --no-dependencies -p "$VSCE_PAT"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

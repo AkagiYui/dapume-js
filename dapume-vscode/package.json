@@ -17,7 +17,7 @@
   },
   "categories": ["Programming Languages"],
   "main": "./dist/extension.cjs",
-  "activationEvents": [],
+  "activationEvents": ["onLanguage:dapume"],
   "contributes": {
     "languages": [
       {

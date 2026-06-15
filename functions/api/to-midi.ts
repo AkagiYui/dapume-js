@@ -5,9 +5,9 @@
  */
 import { toMidi } from 'dapume-js';
 import type { DapumeScore } from 'dapume-js';
-import { CORS, preflight, withBodyCache } from './_lib';
+import { preflight, withBodyCache } from './_lib';
 
-export const onRequestOptions = () => preflight();
+export const onRequestOptions = (context: { request: Request }) => preflight(context.request);
 
 export const onRequestPost = (context: { request: Request; waitUntil: (p: Promise<unknown>) => void }) =>
   withBodyCache(context, 'to-midi', (body) => {
@@ -17,7 +17,6 @@ export const onRequestPost = (context: { request: Request; waitUntil: (p: Promis
       headers: {
         'Content-Type': 'audio/midi',
         'Cache-Control': 'public, s-maxage=86400',
-        ...CORS,
       },
     });
   });

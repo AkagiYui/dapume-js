@@ -10,6 +10,7 @@ import { SiteHeader } from '~/components/SiteHeader';
 import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { Switch, SwitchControl, SwitchLabel, SwitchThumb } from '~/components/ui/switch';
+import { Dialog, DialogContent, DialogTitle } from '~/components/ui/dialog';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
 import {
@@ -81,15 +82,34 @@ export default function ScoreManager() {
     navigate({ to: '/workbench/$id', params: { id: doc.id } });
   }
 
-  async function onRename(doc: ScoreDoc) {
-    const name = window.prompt(t('manager.renamePrompt'), doc.title);
-    if (name != null && name.trim()) await renameScore(doc.id, name);
-  }
+  // 重命名 / 删除改用组件库弹窗（替代浏览器 prompt/confirm）
+  const [renameTarget, setRenameTarget] = createSignal<ScoreDoc | null>(null);
+  const [renameValue, setRenameValue] = createSignal('');
+  const [deleteTarget, setDeleteTarget] = createSignal<ScoreDoc | null>(null);
+  // 记录打开弹窗前的触发按钮，关闭后还原焦点（并规避 aria-hidden 警告）
+  let restoreFocus: HTMLElement | null = null;
 
-  async function onDelete(doc: ScoreDoc) {
-    if (window.confirm(t('manager.confirmDelete', { title: doc.title }))) {
-      await deleteScore(doc.id);
-    }
+  function openRename(doc: ScoreDoc) {
+    restoreFocus = document.activeElement as HTMLElement | null;
+    restoreFocus?.blur();
+    setRenameValue(doc.title);
+    setRenameTarget(doc);
+  }
+  async function confirmRename() {
+    const doc = renameTarget();
+    const name = renameValue().trim();
+    if (doc && name) await renameScore(doc.id, name);
+    setRenameTarget(null);
+  }
+  function openDelete(doc: ScoreDoc) {
+    restoreFocus = document.activeElement as HTMLElement | null;
+    restoreFocus?.blur();
+    setDeleteTarget(doc);
+  }
+  async function confirmDelete() {
+    const doc = deleteTarget();
+    if (doc) await deleteScore(doc.id);
+    setDeleteTarget(null);
   }
 
   return (
@@ -169,7 +189,7 @@ export default function ScoreManager() {
                           class="ml-auto size-8"
                           aria-label={t('manager.rename')}
                           title={t('manager.rename')}
-                          onClick={() => onRename(doc)}
+                          onClick={() => openRename(doc)}
                         >
                           <Icon icon="lucide:pencil" />
                         </Button>
@@ -179,7 +199,7 @@ export default function ScoreManager() {
                           class="size-8 text-destructive hover:text-destructive"
                           aria-label={t('manager.delete')}
                           title={t('manager.delete')}
-                          onClick={() => onDelete(doc)}
+                          onClick={() => openDelete(doc)}
                         >
                           <Icon icon="lucide:trash-2" />
                         </Button>
@@ -192,6 +212,72 @@ export default function ScoreManager() {
           </Show>
         </Show>
       </main>
+
+      {/* 重命名弹窗 */}
+      <Dialog
+        open={renameTarget() !== null}
+        onOpenChange={(o) => {
+          if (!o) setRenameTarget(null);
+        }}
+      >
+        <DialogContent
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            restoreFocus?.focus();
+          }}
+        >
+          <DialogTitle class="mb-3">{t('manager.renameTitle')}</DialogTitle>
+          <label class="mb-1.5 block text-sm text-muted-foreground">{t('manager.renamePrompt')}</label>
+          <input
+            class="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={renameValue()}
+            onInput={(e) => setRenameValue(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void confirmRename();
+              }
+            }}
+            autofocus
+          />
+          <div class="mt-5 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setRenameTarget(null)}>
+              {t('manager.cancel')}
+            </Button>
+            <Button onClick={() => void confirmRename()} disabled={!renameValue().trim()}>
+              {t('manager.save')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除二次确认弹窗 */}
+      <Dialog
+        open={deleteTarget() !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            restoreFocus?.focus();
+          }}
+        >
+          <DialogTitle class="mb-3">{t('manager.deleteTitle')}</DialogTitle>
+          <p class="text-sm text-muted-foreground">
+            {t('manager.confirmDelete', { title: deleteTarget()?.title ?? '' })}
+          </p>
+          <div class="mt-5 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+              {t('manager.cancel')}
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()}>
+              {t('manager.delete')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -113,6 +113,130 @@ const lineHighlightField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+/** 粘性参数行「是否启用」开关（用状态字段而非增删插件，避免反复重建导致的累积）。 */
+const setStickyEnabled = StateEffect.define<boolean>();
+const stickyEnabledField = StateField.define<boolean>({
+  create: () => true,
+  update(val, tr) {
+    for (const e of tr.effects) if (e.is(setStickyEnabled)) val = e.value;
+    return val;
+  },
+});
+
+/**
+ * 「参数行粘性置顶」插件（类似 VSCode sticky scroll，但只有单层）。
+ * 当某个参数行（1=调号 / 速度行）滚出视口顶部时，把它固定显示在编辑器顶部；点击回到该行。
+ * 插件常驻，显隐由 {@link stickyEnabledField} 控制。
+ */
+function stickyHeaderPlugin() {
+  return ViewPlugin.fromClass(
+    class {
+      view: EditorView;
+      bar: HTMLDivElement;
+      params: { line: number; text: string }[] = [];
+      current: number | null = null;
+      raf = 0;
+      onScroll = () => this.schedule();
+
+      constructor(view: EditorView) {
+        this.view = view;
+        this.bar = document.createElement('div');
+        this.bar.className = 'cm-sticky-header';
+        this.bar.style.display = 'none';
+        // mousedown 阻止默认，避免抢走编辑器选区；click 跳回该参数行
+        this.bar.addEventListener('mousedown', (e) => e.preventDefault());
+        this.bar.addEventListener('click', () => this.jump());
+        if (!view.dom.style.position) view.dom.style.position = 'relative';
+        view.dom.appendChild(this.bar);
+        view.scrollDOM.addEventListener('scroll', this.onScroll, { passive: true });
+        this.computeParams();
+        this.schedule(); // 用 rAF 调度首渲，避免在构造/更新期间读取布局（CM 不允许）
+      }
+
+      update(u: ViewUpdate) {
+        if (u.docChanged) this.computeParams();
+        // 经 rAF 调度重渲：render() 会读取布局（lineBlockAtHeight），不能在 update 周期内同步执行
+        this.schedule();
+      }
+
+      destroy() {
+        this.view.scrollDOM.removeEventListener('scroll', this.onScroll);
+        if (this.raf) cancelAnimationFrame(this.raf);
+        this.bar.remove();
+      }
+
+      schedule() {
+        if (this.raf) return;
+        this.raf = requestAnimationFrame(() => {
+          this.raf = 0;
+          this.render();
+        });
+      }
+
+      /** 扫描全文，记录所有「参数行」（含 key 或 bpm 记号的行）。 */
+      computeParams() {
+        const doc = this.view.state.doc;
+        const set = new Set<number>();
+        for (const tk of tokenize(doc.toString())) {
+          if (tk.type === 'key' || tk.type === 'bpm') set.add(doc.lineAt(tk.start).number);
+        }
+        this.params = [...set]
+          .sort((a, b) => a - b)
+          .map((n) => ({ line: n, text: doc.line(n).text.trim() }));
+      }
+
+      render() {
+        const v = this.view;
+        if (!v.state.field(stickyEnabledField, false) || this.params.length === 0) return this.hide();
+        // 用几何而非命中测试取视口顶部行：避免被粘性条自身遮挡而取错位置
+        const topBlock = v.lineBlockAtHeight(v.scrollDOM.scrollTop);
+        const topLine = v.state.doc.lineAt(topBlock.from).number;
+        // 找到 ≤ 顶部行的最近参数行
+        let found: { line: number; text: string } | null = null;
+        for (const it of this.params) {
+          if (it.line <= topLine) found = it;
+          else break;
+        }
+        // 仅当该参数行已滚出视口顶部（在顶部行之上）时才显示
+        if (!found || found.line >= topLine) return this.hide();
+        this.current = found.line;
+        this.bar.textContent = found.text;
+        const gutter = v.dom.querySelector('.cm-gutters') as HTMLElement | null;
+        this.bar.style.paddingLeft = `${(gutter ? gutter.offsetWidth : 4) + 6}px`;
+        this.bar.style.display = '';
+      }
+
+      hide() {
+        this.current = null;
+        this.bar.style.display = 'none';
+      }
+
+      jump() {
+        if (this.current == null) return;
+        const line = this.view.state.doc.line(this.current);
+        this.view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start' }) });
+      }
+    },
+  );
+}
+
+/**
+ * 若指定位置所在的行不在「舒适可视区」内，则滚动到接近居中处；smooth=true 用平滑滚动。
+ * 只在必要时滚动，避免播放时逐音符重复居中造成的抖动闪烁。
+ */
+function ensureLineVisible(v: EditorView, pos: number, smooth: boolean): void {
+  pos = Math.max(0, Math.min(pos, v.state.doc.length));
+  const block = v.lineBlockAt(v.state.doc.lineAt(pos).from);
+  const scroller = v.scrollDOM;
+  const viewH = scroller.clientHeight;
+  const relTop = block.top - scroller.scrollTop; // 行顶相对视口顶部
+  const relBottom = block.bottom - scroller.scrollTop; // 行底相对视口顶部
+  const margin = Math.min(96, viewH * 0.25);
+  if (relTop >= margin && relBottom <= viewH - margin) return; // 已舒适可见，不滚动
+  const target = Math.max(0, block.top - (viewH - (block.bottom - block.top)) / 2);
+  scroller.scrollTo({ top: target, behavior: smooth ? 'smooth' : 'auto' });
+}
+
 const editableComp = new Compartment();
 
 export interface CodeEditorProps {
@@ -122,6 +246,10 @@ export interface CodeEditorProps {
   highlights?: HighlightRange[];
   /** 是否在播放时把当前发声的行滚动到可视区域。 */
   keepVisible?: boolean;
+  /** keepVisible 滚动时是否平滑（默认 true）。 */
+  smoothScroll?: boolean;
+  /** 是否启用「参数行粘性置顶」。 */
+  sticky?: boolean;
   placeholder?: string;
 }
 
@@ -150,6 +278,8 @@ export function CodeEditor(props: CodeEditorProps) {
             EditorState.readOnly.of(!!props.readOnly),
             EditorView.editable.of(!props.readOnly),
           ]),
+          stickyEnabledField,
+          stickyHeaderPlugin(),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) props.onChange?.(u.state.doc.toString());
           }),
@@ -177,20 +307,20 @@ export function CodeEditor(props: CodeEditorProps) {
     });
   });
 
+  // 粘性参数行开关：插件常驻，仅切换状态字段（含初始值，故不 defer）
+  createEffect(() => {
+    view?.dispatch({ effects: setStickyEnabled.of(!!props.sticky) });
+  });
+
   // 播放高亮（含当前行高亮），并按需把当前发声的行滚动到可视区域
   createEffect(() => {
     const ranges = (props.highlights ?? []).map((r) => ({ from: r.from, to: r.to }));
     const v = view;
     if (!v) return;
+    v.dispatch({ effects: setHighlights.of(ranges) });
+    // 仅当目标行离开舒适可视区时才滚动（平滑），避免逐音符重复居中造成的闪动
     if (props.keepVisible && ranges.length > 0) {
-      // 滚动到当前行的行首，使同一行内不抖动
-      const pos = Math.min(ranges[0]!.from, v.state.doc.length);
-      const lineFrom = v.state.doc.lineAt(pos).from;
-      v.dispatch({
-        effects: [setHighlights.of(ranges), EditorView.scrollIntoView(lineFrom, { y: 'center' })],
-      });
-    } else {
-      v.dispatch({ effects: setHighlights.of(ranges) });
+      ensureLineVisible(v, ranges[0]!.from, props.smoothScroll !== false);
     }
   });
 

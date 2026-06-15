@@ -142,6 +142,14 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [keepLine, setKeepLine] = createSignal(lsGet('dapume.keepLine', 'true') === 'true');
   createEffect(() => lsSet('dapume.keepLine', String(keepLine())));
 
+  // keepLine 滚动是否平滑
+  const [smooth, setSmooth] = createSignal(lsGet('dapume.smooth', 'true') === 'true');
+  createEffect(() => lsSet('dapume.smooth', String(smooth())));
+
+  // 参数行粘性置顶
+  const [sticky, setSticky] = createSignal(lsGet('dapume.sticky', 'true') === 'true');
+  createEffect(() => lsSet('dapume.sticky', String(sticky())));
+
   // ===== 窄屏适配 =====
   const narrowMedia = window.matchMedia('(max-width: 768px)');
   const [isNarrow, setIsNarrow] = createSignal(narrowMedia.matches);
@@ -239,6 +247,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       readOnly={playActive()}
       highlights={highlights()}
       keepVisible={keepLine() && playActive()}
+      smoothScroll={smooth()}
+      sticky={sticky()}
       placeholder={'1=C 120bpm\n1234567'}
     />
   );
@@ -295,6 +305,24 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         <SwitchLabel class="flex items-center gap-1.5 text-sm">
           <Icon icon="lucide:scroll-text" />
           {t('workbench.keepLine')}
+        </SwitchLabel>
+        <SwitchControl>
+          <SwitchThumb />
+        </SwitchControl>
+      </Switch>
+      <Switch checked={smooth()} onChange={setSmooth} class="flex items-center justify-between">
+        <SwitchLabel class="flex items-center gap-1.5 text-sm">
+          <Icon icon="lucide:move-vertical" />
+          {t('workbench.smoothScroll')}
+        </SwitchLabel>
+        <SwitchControl>
+          <SwitchThumb />
+        </SwitchControl>
+      </Switch>
+      <Switch checked={sticky()} onChange={setSticky} class="flex items-center justify-between">
+        <SwitchLabel class="flex items-center gap-1.5 text-sm">
+          <Icon icon="lucide:panel-top" />
+          {t('workbench.stickyParam')}
         </SwitchLabel>
         <SwitchControl>
           <SwitchThumb />

@@ -1,10 +1,11 @@
 name: Publish Package
 
 # 推送形如 v1.2.3 的 tag 时触发：测试 → 构建 → 通过 OIDC「可信发布」到 npm（无需 token）。
+# 用 v[0-9]* 而非 v*，以免误匹配扩展的 vscode-v* tag。
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]*'
 
 permissions:
   id-token: write # 可信发布（OIDC）所需

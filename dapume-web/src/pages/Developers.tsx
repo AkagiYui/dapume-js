@@ -6,6 +6,7 @@ import { useNavigate } from '@tanstack/solid-router';
 import { SiteHeader } from '~/components/SiteHeader';
 import { CodeBlock } from '~/components/CodeBlock';
 import { HighlightedCode } from '~/components/HighlightedCode';
+import { ApiTester } from '~/components/ApiTester';
 import { Button, buttonVariants } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { t } from '~/i18n';
@@ -15,12 +16,18 @@ const REPO_URL = 'https://github.com/AkagiYui/dapume-js';
 const PY_REPO_URL = 'https://github.com/ScarlettRinko/dapume';
 const NPMX_URL = 'https://npmx.dev/package/dapume-js';
 const API_REF_URL = 'https://npmx.dev/package-docs/dapume-js';
-/** shields.io 徽章（发布后自动显示实时数据）。 */
+const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=AkagiYui.dapume-vscode';
+/** shields.io 徽章（发布后自动显示实时数据），各自链接到对应页面。 */
 const BADGES = [
-  { src: 'https://img.shields.io/npm/v/dapume-js?logo=npm&color=%23cb3837', alt: 'npm version' },
-  { src: 'https://img.shields.io/npm/dm/dapume-js?color=%2334d399', alt: 'npm downloads' },
-  { src: 'https://img.shields.io/npm/l/dapume-js?color=%236366f1', alt: 'license' },
-  { src: 'https://img.shields.io/bundlephobia/minzip/dapume-js?label=minzip', alt: 'bundle size' },
+  { src: 'https://img.shields.io/npm/v/dapume-js?logo=npm&color=%23cb3837', alt: 'npm version', href: NPMX_URL },
+  { src: 'https://img.shields.io/npm/dm/dapume-js?color=%2334d399', alt: 'npm downloads', href: NPMX_URL },
+  { src: 'https://img.shields.io/npm/l/dapume-js?color=%236366f1', alt: 'license', href: NPMX_URL },
+  { src: 'https://img.shields.io/bundlephobia/minzip/dapume-js?label=minzip', alt: 'bundle size', href: NPMX_URL },
+  {
+    src: 'https://img.shields.io/visual-studio-marketplace/v/AkagiYui.dapume-vscode?logo=visualstudiocode&label=vscode&color=%23007ACC',
+    alt: 'vscode marketplace',
+    href: MARKETPLACE_URL,
+  },
 ];
 
 const INSTALL = `pnpm add dapume-js
@@ -84,6 +91,26 @@ interface DapumeSection {
   key: string;       // 调号标签，如 "C"、"Bb."
 }`;
 
+/** HTTP 接口的一行说明：方法 + 路径 + 请求/响应内容类型。 */
+function EndpointRow(props: {
+  method: string;
+  path: string;
+  req: string;
+  res: string;
+  extra?: string;
+}) {
+  return (
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs">
+      <span class="rounded bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">{props.method}</span>
+      <span class="font-semibold">{props.path}</span>
+      <span class="text-muted-foreground">{props.req}</span>
+      <Icon icon="lucide:arrow-right" class="text-muted-foreground" />
+      <span class="text-muted-foreground">{props.res}</span>
+      {props.extra && <span class="text-muted-foreground">{props.extra}</span>}
+    </div>
+  );
+}
+
 function Section(props: { title: string; desc?: string; children: import('solid-js').JSX.Element }) {
   return (
     <section class="border-b py-7 last:border-0">
@@ -114,7 +141,7 @@ export default function Developers() {
         <div class="mt-4 flex flex-wrap items-center gap-2">
           <For each={BADGES}>
             {(b) => (
-              <a href={NPMX_URL} target="_blank" rel="noreferrer" class="inline-flex">
+              <a href={b.href} target="_blank" rel="noreferrer" class="inline-flex">
                 <img src={b.src} alt={b.alt} class="h-5" loading="lazy" />
               </a>
             )}
@@ -140,6 +167,15 @@ export default function Developers() {
           >
             <Icon icon="lucide:book-open" />
             {t('dev.apiRef')}
+          </a>
+          <a
+            href={MARKETPLACE_URL}
+            target="_blank"
+            rel="noreferrer"
+            class={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <Icon icon="lucide:puzzle" />
+            {t('dev.marketplace')}
           </a>
           <a
             href={PY_REPO_URL}
@@ -175,6 +211,29 @@ export default function Developers() {
 
           <Section title={t('dev.typesTitle')}>
             <CodeBlock code={TYPES} />
+          </Section>
+
+          <Section title={t('dev.httpTitle')} desc={t('dev.httpDesc')}>
+            <div class="space-y-2">
+              <EndpointRow method="POST" path="/api/parse" req="text/plain" res="application/json" />
+              <EndpointRow method="POST" path="/api/to-midi" req="application/json" res="audio/midi" />
+              <EndpointRow
+                method="POST"
+                path="/api/render"
+                req="text/plain"
+                res="audio/midi"
+                extra="+ X-Note-Count / X-Track-Count / X-Duration-Ms"
+              />
+            </div>
+            <p class="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Icon icon="lucide:shield-check" />
+              {t('dev.httpSameOrigin')}
+            </p>
+            <div class="mt-5">
+              <h3 class="mb-1 text-base font-semibold">{t('dev.tryTitle')}</h3>
+              <p class="mb-3 text-sm text-muted-foreground">{t('dev.tryDesc')}</p>
+              <ApiTester />
+            </div>
           </Section>
 
           <Section title={t('dev.vscodeTitle')} desc={t('dev.vscodeDesc')}>

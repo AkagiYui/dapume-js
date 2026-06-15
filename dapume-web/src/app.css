@@ -146,6 +146,33 @@
   background-color: color-mix(in oklch, var(--primary) 25%, transparent) !important;
 }
 
+/* 参数行粘性置顶条（单层 sticky header） */
+.cm-sticky-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  height: calc(15px * 1.7);
+  line-height: calc(15px * 1.7);
+  padding-right: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 4px color-mix(in oklch, var(--foreground) 8%, transparent);
+  cursor: pointer;
+  user-select: none;
+}
+.cm-sticky-header:hover {
+  background-color: var(--muted);
+}
+
 /* 各类记号配色 */
 .tok-key      { color: oklch(0.55 0.22 293); font-weight: 600; }
 .tok-bpm      { color: oklch(0.6 0.15 200); font-weight: 600; }
