@@ -46,10 +46,29 @@ function trackColor(track: number, alpha = 1): string {
   return `oklch(0.62 0.17 ${hue} / ${alpha})`;
 }
 
+/** 缩放（像素/毫秒）持久化。 */
+const ZOOM_KEY = 'dapume.pianoZoom';
+const DEFAULT_ZOOM = 0.12;
+function readZoom(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(ZOOM_KEY) || '');
+    return Number.isFinite(v) && v >= 0.01 && v <= 2 ? v : DEFAULT_ZOOM;
+  } catch {
+    return DEFAULT_ZOOM;
+  }
+}
+function writeZoom(v: number): void {
+  try {
+    localStorage.setItem(ZOOM_KEY, String(v));
+  } catch {
+    /* 忽略 */
+  }
+}
+
 export function PianoRoll(props: PianoRollProps) {
   let containerEl!: HTMLDivElement;
   let canvasEl!: HTMLCanvasElement;
-  let pxPerMs = 0.12; // 缩放：像素/毫秒
+  let pxPerMs = readZoom(); // 缩放：像素/毫秒（持久化）
   let userScrollX = 0; // 非跟随模式下的滚动位置（毫秒）
   let cssW = 0;
   let cssH = 0;
@@ -114,8 +133,11 @@ export function PianoRoll(props: PianoRollProps) {
       userScrollX = scrollX;
     }
 
-    // 逻辑坐标：tPos 沿时间轴（音符区从 naLo 开始）、pPos 沿音高轴
-    const tPos = (t: number) => naLo + (t - scrollX) * pxPerMs;
+    // 逻辑坐标：tPos 沿时间轴、pPos 沿音高轴。
+    // 让「瀑布」始终朝着琴键所在的位置流动：键盘在起点时时间正向、在末端时时间反向，
+    // 使演奏指针贴近键盘、未来音符在远端、随播放向键盘汇聚。
+    const tPos = (t: number) =>
+      kbAtStart ? naLo + (t - scrollX) * pxPerMs : naHi - (t - scrollX) * pxPerMs;
     const pPos = (p: number) => (highAtCoord0 ? hi - p : p - lo) * cell;
     // 逻辑矩形（沿时间 [t0,tLen]、沿音高 [p0,pLen]）→ 屏幕矩形
     const fillRect = (t0: number, tLen: number, p0: number, pLen: number) => {
@@ -162,13 +184,16 @@ export function PianoRoll(props: PianoRollProps) {
       else ctx.fillText(`${s}s`, tc + 3, 11);
     }
 
-    // 音符（裁剪到音符区 [naLo, naHi]）
+    // 音符（裁剪到音符区 [naLo, naHi]；时间方向可能反向，故取两端的 min/max）
     for (const n of props.notes) {
-      const t0 = tPos(n.startTime);
-      const tFull = Math.max(1.5, n.duration * pxPerMs);
-      if (t0 + tFull < naLo || t0 > naHi) continue;
-      const drawT = Math.max(t0, naLo);
-      const drawTLen = Math.min(t0 + tFull, naHi) - drawT;
+      const a = tPos(n.startTime);
+      const b = tPos(n.startTime + n.duration);
+      let lo_ = Math.min(a, b);
+      let hi_ = Math.max(a, b);
+      if (hi_ - lo_ < 1.5) hi_ = lo_ + 1.5; // 最小可见长度
+      if (hi_ < naLo || lo_ > naHi) continue;
+      const drawT = Math.max(lo_, naLo);
+      const drawTLen = Math.min(hi_, naHi) - drawT;
       if (drawTLen <= 0) continue;
       const p0 = pPos(n.pitch);
       const active =
@@ -185,14 +210,20 @@ export function PianoRoll(props: PianoRollProps) {
     // 键盘：先以 bg 覆盖键盘区（时间轴上 KEYBOARD_W 宽、全音高轴）
     ctx.fillStyle = bg;
     fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
+    // 黑键仅占 2/3 长度，且贴在远离音符区的一侧（像真实钢琴俯视图）
+    const blackKeyLen = (keyBodyLen * 2) / 3;
+    const blackKeyStart = kbAtStart ? keyBodyStart : keyBodyStart + keyBodyLen - blackKeyLen;
     for (let p = lo; p <= hi; p++) {
       const p0 = pPos(p);
-      const isBlack = BLACK_KEYS.has(((p % 12) + 12) % 12);
-      ctx.fillStyle = isBlack ? `color-mix(in oklch, ${fg} 82%, ${bg})` : bg;
-      fillRect(keyBodyStart, keyBodyLen, p0, cell);
+      // 白键边界
       ctx.strokeStyle = `color-mix(in oklch, ${border} 60%, transparent)`;
       strokeRect(keyBodyStart + 0.5, keyBodyLen, p0 + 0.5, cell);
-      // 每个 C 标注音名
+      // 黑键：只占 2/3 长，叠在外侧
+      if (BLACK_KEYS.has(((p % 12) + 12) % 12)) {
+        ctx.fillStyle = `color-mix(in oklch, ${fg} 82%, ${bg})`;
+        fillRect(blackKeyStart, blackKeyLen, p0, cell);
+      }
+      // 每个 C 标注音名（C 是白键，整条都可写）
       if (((p % 12) + 12) % 12 === 0) {
         ctx.fillStyle = mutedFg;
         ctx.font = '9px ui-sans-serif, system-ui';
@@ -236,9 +267,10 @@ export function PianoRoll(props: PianoRollProps) {
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
-      // 缩放
+      // 缩放（持久化）
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       pxPerMs = clamp(pxPerMs * factor, 0.01, 2);
+      writeZoom(pxPerMs);
     } else if (!(props.follow && props.isPlaying)) {
       // 平移（仅在「跟随且正在播放」时禁用，其余情况允许）
       const delta = (e.deltaY + e.deltaX) / pxPerMs;

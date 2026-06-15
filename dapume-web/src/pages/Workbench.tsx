@@ -303,18 +303,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
-  /** 开关：跟随播放 / 保持当前行可视。 */
+  /** 开关：保持当前演奏行可视 / 平滑滚动 / 参数行粘性置顶（「跟随播放」已移至钢琴卷帘标题栏）。 */
   const ToggleSwitches = () => (
     <div class="space-y-3">
-      <Switch checked={follow()} onChange={setFollow} class="flex items-center justify-between">
-        <SwitchLabel class="flex items-center gap-1.5 text-sm">
-          <Icon icon="lucide:crosshair" />
-          {t('workbench.followPlayback')}
-        </SwitchLabel>
-        <SwitchControl>
-          <SwitchThumb />
-        </SwitchControl>
-      </Switch>
       <Switch checked={keepLine()} onChange={setKeepLine} class="flex items-center justify-between">
         <SwitchLabel class="flex items-center gap-1.5 text-sm">
           <Icon icon="lucide:scroll-text" />
@@ -435,6 +426,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     onChange: (v: boolean) => void;
     icon: string;
     label: string;
+    /** 为 true 时把图标旋转 90°（带过渡动画）。 */
+    rotate?: boolean;
   }) => (
     <Switch
       checked={p.checked}
@@ -444,7 +437,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       aria-label={p.label}
     >
       <SwitchLabel class="flex text-muted-foreground">
-        <Icon icon={p.icon} />
+        <Icon
+          icon={p.icon}
+          class={`inline-block transition-transform duration-300 ${p.rotate ? 'rotate-90' : ''}`}
+        />
       </SwitchLabel>
       <SwitchControl class="h-4 w-7">
         <SwitchThumb class="size-3 data-[checked]:translate-x-3" />
@@ -452,27 +448,35 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </Switch>
   );
 
-  /** 钢琴卷帘标题栏右侧信息（朝向/琴键方向开关 + 加载进度 + 操作提示）。 */
+  /** 钢琴卷帘标题栏右侧信息（跟随/朝向/琴键方向/琴键位置开关 + 加载进度 + 操作提示）。 */
   const PianoRollInfo = () => (
     <div class="flex items-center gap-3">
-      {/* 切换：卷帘朝向（横↔纵）与琴键方向（高↔低），放在操作提示左边 */}
+      {/* 切换：跟随播放、卷帘朝向、琴键方向、琴键位置；纵向时把后两个图标旋转 90° */}
       <div class="flex items-center gap-2">
+        <MiniSwitch
+          checked={follow()}
+          onChange={setFollow}
+          icon="lucide:crosshair"
+          label={t('workbench.followPlayback')}
+        />
         <MiniSwitch
           checked={pianoVertical()}
           onChange={setPianoVertical}
-          icon="lucide:flip-vertical-2"
+          icon="lucide:rotate-3d"
           label={t('workbench.pianoOrientation')}
         />
         <MiniSwitch
           checked={pianoAsc()}
           onChange={setPianoAsc}
-          icon="lucide:arrow-down-up"
+          icon="lucide:flip-vertical-2"
+          rotate={pianoVertical()}
           label={t('workbench.pianoKeyDir')}
         />
         <MiniSwitch
           checked={pianoKbFlip()}
           onChange={setPianoKbFlip}
-          icon="lucide:between-vertical-start"
+          icon="lucide:flip-horizontal-2"
+          rotate={pianoVertical()}
           label={t('workbench.pianoKeyboardPos')}
         />
       </div>
@@ -560,7 +564,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         <Icon icon="lucide:square" />
       </Button>
       <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(currentTimeMs())}</span>
-      <ProgressSlider class="flex-1" />
+      {/* mx-2：留出空间，避免把手在两端遮住时间文字 */}
+      <ProgressSlider class="mx-2 flex-1" />
       <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(score().durationMs)}</span>
       <Button
         variant={pianoOpen() ? 'default' : 'outline'}
