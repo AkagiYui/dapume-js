@@ -25,11 +25,15 @@ export const zh = {
     browserDesc: '得到 MIDI 字节后，用 Blob 触发下载：',
     moreTitle: '更多工具函数',
     moreDesc:
-      'render() 一步完成「解析 + 渲染」；tokenize() 返回用于语法高亮的词法单元；activeNotesAt() 返回某时刻正在发声的音符（可用于播放高亮）。',
+      'render() 一步完成「解析 + 渲染」；tokenize() 返回用于语法高亮的词法单元；activeNotesAt() 返回某时刻正在发声的音符；paramsAt() 返回某时刻生效的调号与速度（{ key, bpm, tonic, startTime }）。',
     typesTitle: '类型一览',
+    vscodeTitle: 'VSCode 扩展',
+    vscodeDesc:
+      '本仓库还提供一个 VSCode 扩展：为 .dapume 文件提供语法高亮，并在编辑器标题栏提供「渲染为 MIDI」按钮（内部即调用 dapume-js）。可在 GitHub Actions 的构建产物中下载 .vsix 安装。',
     cta: '到工作台试试',
     repo: 'GitHub 仓库',
     originalRepo: '原 Python 项目',
+    apiRef: 'API 参考',
   },
   settings: {
     title: '设置',
@@ -61,6 +65,21 @@ export const zh = {
     tocTitle: '目录',
     playExample: '播放示例',
     backToTop: '回到顶部',
+  },
+  manager: {
+    title: '我的乐谱',
+    subtitle: '在浏览器中管理你的所有 dapume 乐谱',
+    new: '新建乐谱',
+    untitled: '未命名乐谱',
+    empty: '还没有乐谱，点击「新建乐谱」开始。',
+    open: '打开',
+    rename: '重命名',
+    delete: '删除',
+    autoOpen: '直接访问时自动打开上次编辑的乐谱',
+    updated: '更新于',
+    notes: '音符',
+    confirmDelete: '确定删除「{{ title }}」吗？此操作不可撤销。',
+    renamePrompt: '新名称：',
   },
   workbench: {
     play: '播放',

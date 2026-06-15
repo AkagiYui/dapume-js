@@ -27,11 +27,15 @@ export const en: typeof zh = {
     browserDesc: 'With the MIDI bytes, trigger a download via a Blob:',
     moreTitle: 'More helpers',
     moreDesc:
-      'render() does parse + render in one step; tokenize() returns tokens for syntax highlighting; activeNotesAt() returns the notes sounding at a given time (for playback highlighting).',
+      'render() does parse + render in one step; tokenize() returns tokens for syntax highlighting; activeNotesAt() returns the notes sounding at a given time; paramsAt() returns the key & tempo in effect at a given time ({ key, bpm, tonic, startTime }).',
     typesTitle: 'Types at a glance',
+    vscodeTitle: 'VSCode extension',
+    vscodeDesc:
+      'This repo also ships a VSCode extension: syntax highlighting for .dapume files plus a "Render to MIDI" button in the editor title bar (which calls dapume-js under the hood). Grab the .vsix from the GitHub Actions build artifacts.',
     cta: 'Try it in the workbench',
     repo: 'GitHub repo',
     originalRepo: 'Original Python project',
+    apiRef: 'API reference',
   },
   settings: {
     title: 'Settings',
@@ -64,6 +68,21 @@ export const en: typeof zh = {
     tocTitle: 'Contents',
     playExample: 'Play example',
     backToTop: 'Back to top',
+  },
+  manager: {
+    title: 'My scores',
+    subtitle: 'Manage all your dapume scores in the browser',
+    new: 'New score',
+    untitled: 'Untitled score',
+    empty: 'No scores yet — click “New score” to start.',
+    open: 'Open',
+    rename: 'Rename',
+    delete: 'Delete',
+    autoOpen: 'Auto-open last edited score on direct visit',
+    updated: 'Updated',
+    notes: 'notes',
+    confirmDelete: 'Delete “{{ title }}”? This cannot be undone.',
+    renamePrompt: 'New name:',
   },
   workbench: {
     play: 'Play',

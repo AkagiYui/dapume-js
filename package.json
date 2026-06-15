@@ -11,7 +11,8 @@
     "dev:web": "pnpm --filter dapume-web dev",
     "test": "pnpm -r test",
     "test:js": "pnpm --filter dapume-js test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "typecheck:functions": "tsc -p functions/tsconfig.json"
   },
   "keywords": [
     "dapume",
@@ -22,6 +23,13 @@
   ],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "dapume-js": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260615.1",
+    "typescript": "^6.0.3"
+  },
   "packageManager": "pnpm@10.33.1",
   "engines": {
     "node": ">=22.18.0"

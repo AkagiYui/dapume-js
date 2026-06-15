@@ -6,7 +6,18 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      dapume-js:
+        specifier: workspace:*
+        version: link:dapume-js
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20260615.1
+        version: 4.20260615.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   dapume-js:
     devDependencies:
@@ -77,6 +88,9 @@ importers:
       highlight.js:
         specifier: ^11.11.0
         version: 11.11.1
+      idb-keyval:
+        specifier: ^6.2.1
+        version: 6.2.5
       smplr:
         specifier: ^1.0.0
         version: 1.0.0
@@ -233,6 +247,9 @@ packages:
   '@babel/types@8.0.0-rc.6':
     resolution: {integrity: sha512-p7/ABylAYlexb31wtRdIfH9L9A0Z2T/9H6zAqzqndkY2PLkvNNc580wGhp/gGKN4Sp9sQvSkhc6Oga8/O+wTyw==}
     engines: {node: ^22.18.0 || >=24.11.0}
+
+  '@cloudflare/workers-types@4.20260615.1':
+    resolution: {integrity: sha512-fGOiTwoLj/8bU8mj3VAfa1EULx4ceZhDwnjvY+afDBlSXI9pvY7PE9t62rGEhJjbAOGd7i5WUDun0eZCWBDrzg==}
 
   '@codemirror/commands@6.10.3':
     resolution: {integrity: sha512-JFRiqhKu+bvSkDLI+rUhJwSxQxYb759W5GBezE8Uc8mHLqC9aV/9aTC7yJSqCtB3F00pylrLCwnyS91Ap5ej4Q==}
@@ -1122,6 +1139,9 @@ packages:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
 
+  idb-keyval@6.2.5:
+    resolution: {integrity: sha512-eKQkTnS0relYsSOYomx8ozIbmdsQCKUdhyuIaQ2DZgKuaxtyQQMkyD/wlnQN32pO3yutN1b1L8uqwcDKaJd7/Q==}
+
   import-without-cache@0.4.0:
     resolution: {integrity: sha512-NkJQA7oZ4YHQhd2+H3BoRFKF3d/XNsiKpHZCQEMH9pDX27hQQLsTyOocyRgaIVtf8gHX3Nt3LPkR4e5EdtPAGQ==}
     engines: {node: ^22.18.0 || >=24.0.0}
@@ -1830,6 +1850,8 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 8.0.0-rc.6
       '@babel/helper-validator-identifier': 8.0.0-rc.6
+
+  '@cloudflare/workers-types@4.20260615.1': {}
 
   '@codemirror/commands@6.10.3':
     dependencies:
@@ -2656,6 +2678,8 @@ snapshots:
   iconv-lite@0.6.3:
     dependencies:
       safer-buffer: 2.1.2
+
+  idb-keyval@6.2.5: {}
 
   import-without-cache@0.4.0: {}
 

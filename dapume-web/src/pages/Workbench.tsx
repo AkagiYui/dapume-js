@@ -26,7 +26,9 @@ import { Slider, SliderFill, SliderThumb, SliderTrack } from '~/components/ui/sl
 import { Resizable, ResizableHandle, ResizablePanel } from '~/components/ui/resizable';
 import { BottomDrawer } from '~/components/ui/drawer';
 
-import { DEFAULT_SCORE, EXAMPLES } from '~/data/examples';
+import { EXAMPLES } from '~/data/examples';
+import { saveScoreContent, setLastScoreId } from '~/stores/scores';
+import type { ScoreDoc } from '~/stores/scores';
 import { downloadBytes, downloadText } from '~/lib/download';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
@@ -110,13 +112,29 @@ const CHEAT: { s: string; zh: string; en: string }[] = [
 
 const EMPTY_SCORE: DapumeScore = { tracks: [], notes: [], trackCount: 0, durationMs: 0, sections: [] };
 
-export default function Workbench() {
+export default function Workbench(props: { doc: ScoreDoc }) {
   const navigate = useNavigate();
 
-  // ===== 持久化状态 =====
-  const [scoreText, setScoreText] = createSignal(lsGet('dapume.score', DEFAULT_SCORE));
-  createEffect(() => lsSet('dapume.score', scoreText()));
+  // ===== 乐谱正文：来自 IndexedDB 的乐谱文档，编辑后防抖写回 =====
+  const [scoreText, setScoreText] = createSignal(props.doc.content);
+  setLastScoreId(props.doc.id);
+  let saveTimer = 0;
+  createEffect(
+    on(
+      scoreText,
+      (content) => {
+        clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(() => void saveScoreContent(props.doc.id, content), 400);
+      },
+      { defer: true },
+    ),
+  );
+  onCleanup(() => {
+    clearTimeout(saveTimer);
+    void saveScoreContent(props.doc.id, scoreText()); // 卸载时立即保存
+  });
 
+  // ===== 其它持久化开关（全局偏好）=====
   const [follow, setFollow] = createSignal(lsGet('dapume.follow', 'true') === 'true');
   createEffect(() => lsSet('dapume.follow', String(follow())));
 
@@ -172,11 +190,14 @@ export default function Workbench() {
     }
   }
 
+  // 以乐谱标题作为下载文件名（过滤掉文件名非法字符）
+  const fileName = (ext: string) =>
+    `${(props.doc.title || 'score').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'score'}.${ext}`;
   function onDownloadMidi() {
-    downloadBytes(toMidi(score()), 'score.mid', 'audio/midi');
+    downloadBytes(toMidi(score()), fileName('mid'), 'audio/midi');
   }
   function onDownloadDpm() {
-    downloadText(scoreText(), 'score.dapume', 'text/plain');
+    downloadText(scoreText(), fileName('dapume'), 'text/plain');
   }
 
   // ===== 可复用片段 =====
@@ -381,7 +402,9 @@ export default function Workbench() {
   const EditorPane = () => (
     <div class="flex h-full flex-col">
       <div class="flex items-center justify-between gap-2 border-b px-3 py-1.5">
-        <span class="shrink-0 text-sm font-medium">{t('workbench.editorTitle')}</span>
+        <span class="min-w-0 shrink truncate text-sm font-medium" title={props.doc.title}>
+          {props.doc.title}
+        </span>
         <ScoreStats />
       </div>
       <div class="min-h-0 flex-1">
@@ -393,9 +416,9 @@ export default function Workbench() {
   const ControlsPane = () => (
     <div class="flex h-full flex-col">
       <div class="flex items-center justify-between border-b px-3 py-1.5">
-        <Button variant="ghost" size="sm" class="gap-1.5" onClick={() => navigate({ to: '/' })}>
+        <Button variant="ghost" size="sm" class="gap-1.5" onClick={() => navigate({ to: '/workbench' })}>
           <Icon icon="lucide:arrow-left" />
-          {t('nav.guide')}
+          {t('manager.title')}
         </Button>
         <div class="flex items-center gap-2">
           {/* 设置模态框开关：放在“操作”文字左边，仅图标 */}
@@ -469,9 +492,14 @@ export default function Workbench() {
         <div class="flex h-[100dvh] flex-col bg-background">
           {/* 顶栏 */}
           <div class="flex items-center justify-between gap-2 border-b px-2 py-1.5">
-            <Button variant="ghost" size="sm" class="gap-1.5" onClick={() => navigate({ to: '/' })}>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="gap-1.5"
+              onClick={() => navigate({ to: '/workbench' })}
+            >
               <Icon icon="lucide:arrow-left" />
-              {t('nav.guide')}
+              {t('manager.title')}
             </Button>
             <ScoreStats />
             <div class="flex items-center gap-1">

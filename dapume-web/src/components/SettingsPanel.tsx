@@ -136,8 +136,20 @@ export function SettingsButton() {
 
 /** 工作台用的设置按钮（模态框 SettingsPanel）。仅图标。 */
 export function SettingsModalButton() {
+  // 记录打开前的触发元素，用于关闭后还原焦点
+  let trigger: HTMLElement | null = null;
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(open) => {
+        // 打开瞬间让触发按钮失焦：Kobalte 随后会给 #root 加 aria-hidden，
+        // 若焦点仍停留在其内部，Chrome 会警告「Blocked aria-hidden…retained focus」。
+        // 失焦后焦点交由对话框接管，关闭时再由 onCloseAutoFocus 还原回按钮。
+        if (open) {
+          trigger = document.activeElement as HTMLElement | null;
+          trigger?.blur();
+        }
+      }}
+    >
       <DialogTrigger
         as={Button}
         variant="ghost"
@@ -147,7 +159,13 @@ export function SettingsModalButton() {
       >
         <Icon icon="lucide:settings" />
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent
+        onCloseAutoFocus={(e) => {
+          // 自行把焦点还原到触发按钮（失焦后 Kobalte 默认会还原到 body）
+          e.preventDefault();
+          trigger?.focus();
+        }}
+      >
         <DialogTitle class="mb-4">{t('settings.title')}</DialogTitle>
         <SettingsPanel />
       </DialogContent>

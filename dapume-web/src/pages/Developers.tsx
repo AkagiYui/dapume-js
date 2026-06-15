@@ -5,6 +5,7 @@ import { For, onMount } from 'solid-js';
 import { useNavigate } from '@tanstack/solid-router';
 import { SiteHeader } from '~/components/SiteHeader';
 import { CodeBlock } from '~/components/CodeBlock';
+import { HighlightedCode } from '~/components/HighlightedCode';
 import { Button, buttonVariants } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { t } from '~/i18n';
@@ -13,6 +14,7 @@ import { ensurePiano } from '~/stores/player';
 const REPO_URL = 'https://github.com/AkagiYui/dapume-js';
 const PY_REPO_URL = 'https://github.com/ScarlettRinko/dapume';
 const NPMX_URL = 'https://npmx.dev/package/dapume-js';
+const API_REF_URL = 'https://npmx.dev/package-docs/dapume-js';
 /** shields.io 徽章（发布后自动显示实时数据）。 */
 const BADGES = [
   { src: 'https://img.shields.io/npm/v/dapume-js?logo=npm&color=%23cb3837', alt: 'npm version' },
@@ -49,18 +51,20 @@ a.download = 'score.mid';
 a.click();
 URL.revokeObjectURL(url);`;
 
-const MORE = `import { parse, render, tokenize, activeNotesAt } from 'dapume-js';
+const MORE = `import { parse, render, tokenize, activeNotesAt, paramsAt } from 'dapume-js';
 
 const mid = render('1=C\\n1234567');          // 解析 + 渲染
 const tokens = tokenize('1=C\\n[4M7]2');        // 语法高亮词法单元
-const score = parse('1=C 120bpm\\n1234567');
-const sounding = activeNotesAt(score, 300);     // 第 300ms 正在发声的音符`;
+const score = parse('1=D 90bpm\\n1234567');
+const sounding = activeNotesAt(score, 300);     // 第 300ms 正在发声的音符
+const { key, bpm } = paramsAt(score, 300);      // 第 300ms 生效的调号/速度 → "D", 90`;
 
 const TYPES = `interface DapumeScore {
-  tracks: DapumeNote[][]; // 按音轨分组（渲染 MIDI 用）
-  notes: DapumeNote[];    // 扁平列表，按开始时刻升序
+  tracks: DapumeNote[][];     // 按音轨分组（渲染 MIDI 用）
+  notes: DapumeNote[];        // 扁平列表，按开始时刻升序
   trackCount: number;
   durationMs: number;
+  sections: DapumeSection[];  // 各参数段（调号/速度随时间变化）
 }
 
 interface DapumeNote {
@@ -71,6 +75,13 @@ interface DapumeNote {
   srcStart: number;  // 源字符起始下标（用于高亮）
   srcEnd: number;
   isChord: boolean;
+}
+
+interface DapumeSection {
+  startTime: number; // 该段起始时刻（毫秒）
+  tonic: number;     // 主音 MIDI
+  bpm: number;
+  key: string;       // 调号标签，如 "C"、"Bb."
 }`;
 
 function Section(props: { title: string; desc?: string; children: import('solid-js').JSX.Element }) {
@@ -122,6 +133,15 @@ export default function Developers() {
             {t('dev.repo')}
           </a>
           <a
+            href={API_REF_URL}
+            target="_blank"
+            rel="noreferrer"
+            class={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <Icon icon="lucide:book-open" />
+            {t('dev.apiRef')}
+          </a>
+          <a
             href={PY_REPO_URL}
             target="_blank"
             rel="noreferrer"
@@ -155,6 +175,10 @@ export default function Developers() {
 
           <Section title={t('dev.typesTitle')}>
             <CodeBlock code={TYPES} />
+          </Section>
+
+          <Section title={t('dev.vscodeTitle')} desc={t('dev.vscodeDesc')}>
+            <HighlightedCode code={'1=C 120bpm\n[1]1234[5]567'} />
           </Section>
         </div>
 

@@ -24,6 +24,7 @@
     "clsx": "^2.1.1",
     "dapume-js": "workspace:*",
     "highlight.js": "^11.11.0",
+    "idb-keyval": "^6.2.1",
     "smplr": "^1.0.0",
     "solid-js": "^1.9.13",
     "tailwind-merge": "^2.6.0"
