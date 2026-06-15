@@ -30,13 +30,14 @@ import { parse } from './parser';
 import { toMidi } from './midi';
 import type { DapumeNote, DapumeScore } from './types';
 
-export { parse } from './parser';
+export { parse, paramsAt } from './parser';
 export { toMidi } from './midi';
 export { tokenize } from './tokenize';
 
 export type {
   DapumeScore,
   DapumeNote,
+  DapumeSection,
   RelativeNote,
   ScoreParameters,
   Token,

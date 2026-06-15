@@ -20,7 +20,13 @@ import {
   RE_PATTERN_KEY_SIGNATURE,
   SOLFEGE_PITCH,
 } from './constants';
-import type { DapumeNote, DapumeScore, RelativeNote, ScoreParameters } from './types';
+import type {
+  DapumeNote,
+  DapumeScore,
+  DapumeSection,
+  RelativeNote,
+  ScoreParameters,
+} from './types';
 
 /** Python 风格取模（结果与除数同号），用于调号字母换算。 */
 function pymod(a: number, b: number): number {
@@ -229,6 +235,8 @@ interface LineParam {
   changed: boolean;
   tonic: number;
   bpm: number;
+  /** 调号标签，如 "C"、"Bb."（不含前缀 "1="）。 */
+  key: string;
 }
 
 /**
@@ -262,12 +270,14 @@ export function parse(text: string): DapumeScore {
   // 逐行计算参数（用 running 状态实现「未指定则继承」）
   let runTonic = DEFAULT_TONIC;
   let runBpm = DEFAULT_BPM;
+  let runKey = 'C';
   const paramByLine: LineParam[] = [];
   for (const line of rawLines) {
     let changed = false;
     const km = line.match(RE_PATTERN_KEY_SIGNATURE);
     if (km) {
       runTonic = keySignatureToTonic(km[0]);
+      runKey = km[0].slice(2); // "1=Bb." → "Bb."
       changed = true;
     }
     const bm = line.match(RE_PATTERN_BPM);
@@ -276,14 +286,16 @@ export function parse(text: string): DapumeScore {
       if (digits !== '') runBpm = Number.parseInt(digits, 10);
       changed = true;
     }
-    paramByLine.push({ changed, tonic: runTonic, bpm: runBpm });
+    paramByLine.push({ changed, tonic: runTonic, bpm: runBpm, key: runKey });
   }
   // 末尾哨兵：保证最后一个音符块被解析
-  paramByLine.push({ changed: true, tonic: runTonic, bpm: runBpm });
+  paramByLine.push({ changed: true, tonic: runTonic, bpm: runBpm, key: runKey });
 
   // 逐块解析：连续的非参数行拼接为一个音符块
   const allNotes: DapumeNote[] = [];
+  const sections: DapumeSection[] = [];
   let curParam: ScoreParameters = { tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM };
+  let curKey = 'C';
   let stTime = 0;
   let blockStr = '';
   let blockSrc: number[] = [];
@@ -291,6 +303,7 @@ export function parse(text: string): DapumeScore {
   for (let i = 0; i < rawLines.length; i++) {
     if (paramByLine[i]!.changed) {
       curParam = { tonic: paramByLine[i]!.tonic, bpm: paramByLine[i]!.bpm };
+      curKey = paramByLine[i]!.key;
     } else {
       const line = rawLines[i]!;
       const base = lineStart[i]!;
@@ -302,10 +315,13 @@ export function parse(text: string): DapumeScore {
         const rel = parseNoteLineRelative(blockStr, blockSrc);
         const abs = relativeToAbsolute(rel, curParam);
         if (abs.length > 0) {
+          const blockStart = stTime; // 本块首音符的时刻
           for (const n of abs) n.startTime += stTime;
           const last = abs[abs.length - 1]!;
           stTime = last.startTime + last.duration;
           for (const n of abs) allNotes.push(n);
+          // 记录该段的调号/速度（用于按时间查询当前 1=? 与 bpm）
+          sections.push({ startTime: blockStart, tonic: curParam.tonic, bpm: curParam.bpm, key: curKey });
         }
         blockStr = '';
         blockSrc = [];
@@ -334,5 +350,20 @@ export function parse(text: string): DapumeScore {
   let durationMs = 0;
   for (const n of valid) durationMs = Math.max(durationMs, n.startTime + n.duration);
 
-  return { tracks, notes, trackCount, durationMs };
+  return { tracks, notes, trackCount, durationMs, sections };
+}
+
+/**
+ * 返回给定时刻（毫秒）生效的调号与速度（用于播放时实时显示 1=? 与 bpm）。
+ *
+ * @param score 乐谱对象。
+ * @param timeMs 当前时刻（毫秒）。
+ */
+export function paramsAt(score: DapumeScore, timeMs: number): DapumeSection {
+  let cur: DapumeSection = { startTime: 0, tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM, key: 'C' };
+  for (const s of score.sections) {
+    if (s.startTime <= timeMs) cur = s;
+    else break;
+  }
+  return cur;
 }

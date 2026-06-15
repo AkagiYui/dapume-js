@@ -74,10 +74,11 @@ URL.revokeObjectURL(url);
 
 ```ts
 interface DapumeScore {
-  tracks: DapumeNote[][];  // 按音轨分组的音符（其内部顺序用于渲染 MIDI）
-  notes: DapumeNote[];     // 所有音符的扁平列表，已按开始时刻升序排序
-  trackCount: number;      // 音轨数量
-  durationMs: number;      // 总时长（毫秒）
+  tracks: DapumeNote[][];     // 按音轨分组的音符（其内部顺序用于渲染 MIDI）
+  notes: DapumeNote[];        // 所有音符的扁平列表，已按开始时刻升序排序
+  trackCount: number;         // 音轨数量
+  durationMs: number;         // 总时长（毫秒）
+  sections: DapumeSection[];  // 各参数段（调号/速度随时间的变化），按开始时刻升序
 }
 
 interface DapumeNote {
@@ -115,6 +116,10 @@ interface Token {
 ### `activeNotesAt(score: DapumeScore, timeMs: number): DapumeNote[]`
 
 返回在给定时刻正在发声的所有音符，常用于播放时高亮当前音符/和弦。
+
+### `paramsAt(score: DapumeScore, timeMs: number): DapumeSection`
+
+返回在给定时刻生效的调号与速度（`{ startTime, tonic, bpm, key }`），常用于播放时实时显示「1=? 与 bpm」。
 
 ---
 

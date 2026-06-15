@@ -1,0 +1,47 @@
+name: VSCode Extension
+
+# 当扩展相关内容（含其依赖 dapume-js）变动时触发：构建并打包为 .vsix，上传为 artifact 供下载测试。
+on:
+  push:
+    paths:
+      - 'dapume-vscode/**'
+      - 'dapume-js/**'
+      - '.github/workflows/vscode-extension.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 先构建依赖库，再构建扩展（扩展会把 dapume-js 打包进产物）。
+      - name: Build dapume-js
+        run: pnpm --filter dapume-js build
+
+      - name: Build extension
+        run: pnpm --filter dapume-vscode build
+
+      # 打包为 .vsix（--no-dependencies：依赖已由 tsdown 打包，无需再纳入 node_modules）。
+      - name: Package VSIX
+        working-directory: dapume-vscode
+        run: npx -y @vscode/vsce package --no-dependencies
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dapume-vscode-vsix
+          path: dapume-vscode/*.vsix
+          if-no-files-found: error

@@ -3,7 +3,7 @@
  * 期望值由 dapume-py（Python 原版）实际运行产出，确保「完美复刻」。
  */
 import { describe, expect, it } from 'vitest';
-import { parse } from '../src/index';
+import { parse, paramsAt } from '../src/index';
 import { flattenTracks } from './helpers';
 
 describe('基础解析', () => {
@@ -111,6 +111,30 @@ describe('源位置追踪', () => {
     const first = score.notes[0]!;
     expect(first.srcStart).toBe(11);
     expect(first.srcEnd).toBe(12);
+  });
+});
+
+describe('参数段（sections / paramsAt）', () => {
+  it('记录每段的调号与速度及其起始时刻', () => {
+    const score = parse('1=C\n123\n1=D\n456');
+    expect(score.sections).toEqual([
+      { startTime: 0, tonic: 60, bpm: 120, key: 'C' },
+      { startTime: 750, tonic: 62, bpm: 120, key: 'D' },
+    ]);
+  });
+
+  it('paramsAt 按时间返回生效的调号/速度', () => {
+    const score = parse('1=C\n123\n1=D\n456');
+    expect(paramsAt(score, 0).key).toBe('C');
+    expect(paramsAt(score, 700).key).toBe('C');
+    expect(paramsAt(score, 800).key).toBe('D');
+  });
+
+  it('带 bpm 与默认值', () => {
+    const score = parse('1=G 100bpm\n1');
+    expect(paramsAt(score, 0)).toMatchObject({ key: 'G', bpm: 100, tonic: 67 });
+    // 空乐谱返回默认 C / 120
+    expect(paramsAt(parse(''), 0)).toMatchObject({ key: 'C', bpm: 120 });
   });
 });
 

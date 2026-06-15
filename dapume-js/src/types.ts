@@ -52,6 +52,20 @@ export interface DapumeNote {
 }
 
 /**
+ * 乐谱中的一个「参数段」：自某时刻起生效的调号与速度。
+ */
+export interface DapumeSection {
+  /** 该段起始时刻（毫秒）。 */
+  startTime: number;
+  /** 主音音高（MIDI，中央 C = 60）。 */
+  tonic: number;
+  /** 速度（每分钟拍数）。 */
+  bpm: number;
+  /** 调号标签，如 "C"、"Bb."（不含前缀 "1="）。 */
+  key: string;
+}
+
+/**
  * 解析后的 dapume 乐谱对象（函数 {@link parse} 的输出）。
  */
 export interface DapumeScore {
@@ -63,6 +77,8 @@ export interface DapumeScore {
   trackCount: number;
   /** 乐谱总时长（毫秒），即最后一个音符的结束时刻。 */
   durationMs: number;
+  /** 各参数段（调号/速度随时间的变化），按开始时刻升序。 */
+  sections: DapumeSection[];
 }
 
 /** 语法高亮的词法单元类型。 */

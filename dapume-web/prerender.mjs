@@ -39,6 +39,11 @@ if (!template.includes(PLACEHOLDER)) {
   throw new Error(`dist/index.html 中找不到 ${PLACEHOLDER}，无法注入预渲染内容`);
 }
 
+// 2b) 写出一个「空壳」spa.html（#root 为空）。未预渲染的路由（如 /workbench）
+//     由 _redirects 回退到它，避免回退到首页内容（否则会先看到首页再切到目标页）。
+await writeFile(join(dist, 'spa.html'), template, 'utf8');
+console.log('[prerender] spa shell -> dist/spa.html');
+
 // 3) 渲染并写出每个路由
 for (const route of ROUTES) {
   const appHtml = await renderPage(route);

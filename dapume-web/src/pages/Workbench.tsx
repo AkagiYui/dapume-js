@@ -12,7 +12,7 @@
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { useNavigate } from '@tanstack/solid-router';
-import { activeNotesAt, parse, toMidi } from 'dapume-js';
+import { activeNotesAt, parse, paramsAt, toMidi } from 'dapume-js';
 import type { DapumeScore } from 'dapume-js';
 
 import { CodeEditor } from '~/components/CodeEditor';
@@ -108,7 +108,7 @@ const CHEAT: { s: string; zh: string; en: string }[] = [
   { s: '120bpm', zh: '速度', en: 'tempo' },
 ];
 
-const EMPTY_SCORE: DapumeScore = { tracks: [], notes: [], trackCount: 0, durationMs: 0 };
+const EMPTY_SCORE: DapumeScore = { tracks: [], notes: [], trackCount: 0, durationMs: 0, sections: [] };
 
 export default function Workbench() {
   const navigate = useNavigate();
@@ -151,11 +151,17 @@ export default function Workbench() {
   ensurePiano().catch(() => {});
   onCleanup(() => stop());
 
-  // 播放时高亮当前发声音符对应的源字符
+  // 「播放态」：正在播放，或已暂停（currentTimeMs > 0）。暂停时仍保留高亮与实时调号/速度。
+  const playActive = createMemo(() => isPlaying() || currentTimeMs() > 0);
+
+  // 播放/暂停时高亮当前发声音符对应的源字符
   const highlights = createMemo(() => {
-    if (!isPlaying()) return [];
+    if (!playActive()) return [];
     return activeNotesAt(score(), currentTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
   });
+
+  // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示）
+  const liveParams = createMemo(() => paramsAt(score(), currentTimeMs()));
 
   function onPlayPause() {
     if (isPlaying()) {
@@ -175,11 +181,19 @@ export default function Workbench() {
 
   // ===== 可复用片段 =====
 
-  /** 乐谱信息：音符数 / 音轨数 / 时长（显示在编辑器标题栏右端）。 */
+  /** 乐谱信息：实时调号/速度（播放/暂停时）+ 音符数 / 音轨数 / 时长。 */
   const ScoreStats = () => (
     <div class="flex items-center gap-3 text-xs text-muted-foreground">
       <Show when={isPlaying()}>
         <Icon icon="lucide:lock" class="text-amber-500" title={t('workbench.playingLocked')} />
+      </Show>
+      {/* 播放/暂停时，在音符数左侧实时显示当前 1=调号 与 bpm */}
+      <Show when={playActive()}>
+        <span class="flex items-center gap-1.5 font-medium text-foreground tabular-nums" title="1= / bpm">
+          <span>1={liveParams().key}</span>
+          <span class="opacity-60">·</span>
+          <span>{liveParams().bpm}bpm</span>
+        </span>
       </Show>
       <span class="flex items-center gap-1 tabular-nums" title={t('workbench.notes')}>
         <Icon icon="lucide:music" />
@@ -196,14 +210,14 @@ export default function Workbench() {
     </div>
   );
 
-  /** 编辑器本体（不含标题栏）。 */
+  /** 编辑器本体（不含标题栏）。播放与暂停时均锁定编辑并保留高亮。 */
   const EditorBody = () => (
     <CodeEditor
       value={scoreText()}
       onChange={setScoreText}
-      readOnly={isPlaying()}
+      readOnly={playActive()}
       highlights={highlights()}
-      keepVisible={keepLine() && isPlaying()}
+      keepVisible={keepLine() && playActive()}
       placeholder={'1=C 120bpm\n1234567'}
     />
   );

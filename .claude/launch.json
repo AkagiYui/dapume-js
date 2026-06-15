@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "dapume-web", "dev", "--port", "5181", "--strictPort"],
       "port": 5181
+    },
+    {
+      "name": "dapume-web-preview",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "dapume-web", "preview", "--port", "5182", "--strictPort"],
+      "port": 5182
     }
   ]
 }

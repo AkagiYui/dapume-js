@@ -7,6 +7,11 @@
   "type": "module",
   "publisher": "AkagiYui",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AkagiYui/dapume-js.git",
+    "directory": "dapume-vscode"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
