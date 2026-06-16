@@ -220,21 +220,19 @@ function stickyHeaderPlugin() {
   );
 }
 
+/** keepLine 滚动锚点：当前演奏行的行顶停在视口的此比例处（与钢琴卷帘的 0.4 一致）。 */
+const SCROLL_ANCHOR = 0.4;
+
 /**
- * 若指定位置所在的行不在「舒适可视区」内，则滚动到接近居中处；smooth=true 用平滑滚动。
- * 只在必要时滚动，避免播放时逐音符重复居中造成的抖动闪烁。
+ * 把指定位置所在行平滑滚动到固定锚点（视口 ~40% 处）。
+ * 仅在「当前演奏行号改变」时调用（见调用处），故每行至多滚动一次：
+ * 既保持演奏行稳定在中上、一行行平滑推进，又不会逐音符重复滚动造成抖动闪烁。
  */
-function ensureLineVisible(v: EditorView, pos: number, smooth: boolean): void {
+function scrollLineToAnchor(v: EditorView, pos: number, smooth: boolean): void {
   pos = Math.max(0, Math.min(pos, v.state.doc.length));
   const block = v.lineBlockAt(v.state.doc.lineAt(pos).from);
-  const scroller = v.scrollDOM;
-  const viewH = scroller.clientHeight;
-  const relTop = block.top - scroller.scrollTop; // 行顶相对视口顶部
-  const relBottom = block.bottom - scroller.scrollTop; // 行底相对视口顶部
-  const margin = Math.min(96, viewH * 0.25);
-  if (relTop >= margin && relBottom <= viewH - margin) return; // 已舒适可见，不滚动
-  const target = Math.max(0, block.top - (viewH - (block.bottom - block.top)) / 2);
-  scroller.scrollTo({ top: target, behavior: smooth ? 'smooth' : 'auto' });
+  const target = Math.max(0, block.top - v.scrollDOM.clientHeight * SCROLL_ANCHOR);
+  v.scrollDOM.scrollTo({ top: target, behavior: smooth ? 'smooth' : 'auto' });
 }
 
 const editableComp = new Compartment();
@@ -256,6 +254,7 @@ export interface CodeEditorProps {
 export function CodeEditor(props: CodeEditorProps) {
   let host!: HTMLDivElement;
   let view: EditorView | undefined;
+  let lastScrolledLine = -1; // keepLine：上次已锚定的演奏行号（仅换行时再滚动）
 
   onMount(() => {
     view = new EditorView({
@@ -318,9 +317,16 @@ export function CodeEditor(props: CodeEditorProps) {
     const v = view;
     if (!v) return;
     v.dispatch({ effects: setHighlights.of(ranges) });
-    // 仅当目标行离开舒适可视区时才滚动（平滑），避免逐音符重复居中造成的闪动
+    // 仅当「当前演奏行号」改变时才滚动，把该行锚定到视口约 40% 处：
+    // 每行至多滚动一次，避免逐音符重复滚动造成的抖动闪烁。
     if (props.keepVisible && ranges.length > 0) {
-      ensureLineVisible(v, ranges[0]!.from, props.smoothScroll !== false);
+      const line = v.state.doc.lineAt(Math.min(ranges[0]!.from, v.state.doc.length)).number;
+      if (line !== lastScrolledLine) {
+        lastScrolledLine = line;
+        scrollLineToAnchor(v, ranges[0]!.from, props.smoothScroll !== false);
+      }
+    } else {
+      lastScrolledLine = -1; // 停止/无高亮时复位，下次播放重新锚定
     }
   });
 

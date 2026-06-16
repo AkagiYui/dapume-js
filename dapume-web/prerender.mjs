@@ -34,9 +34,23 @@ await build({
 const { renderPage, ROUTES } = await import(join(ssrDir, 'entry-server.js'));
 
 // 2) 以客户端构建好的 dist/index.html 作为模板（已含 Vite 注入的 script/css 标签）
-const template = await readFile(join(dist, 'index.html'), 'utf8');
+let template = await readFile(join(dist, 'index.html'), 'utf8');
 if (!template.includes(PLACEHOLDER)) {
   throw new Error(`dist/index.html 中找不到 ${PLACEHOLDER}，无法注入预渲染内容`);
+}
+
+// 2.1) 修正图标离线注册脚本的执行顺序。
+// vite-plugin-iconify-offline 在 build 模式把注册脚本注入到 </head> 前（晚于应用入口），
+// 于是应用先创建 iconify-icon 元素、图标注册晚到，刷新时偶发「图标加载失败」
+// （Service Worker 改变了资源加载时序后更易触发）。这里把它前移到第一个 module 脚本
+// （应用入口）之前——与该插件 dev 模式的 head-prepend 行为一致，保证注册先于渲染。
+const iconifyScript = template.match(/[ \t]*<script\b[^>]*_iconify-offline_icons[^>]*><\/script>\n?/);
+if (iconifyScript) {
+  template = template.replace(iconifyScript[0], '');
+  template = template.replace(
+    /(<script type="module")/,
+    `${iconifyScript[0].trim()}\n    $1`,
+  );
 }
 
 // 3) 渲染并写出每个路由

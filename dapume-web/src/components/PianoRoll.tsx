@@ -28,6 +28,11 @@ export interface PianoRollProps {
    * ON（true）：横向键盘在右、纵向键盘在顶。
    */
   keyboardFlip?: boolean;
+  /**
+   * 判定线（播放指针）位置。false（默认）：判定线悬在音符区约 40% 处，已演奏的音符仍可见；
+   * true：判定线固定在琴键与音符区的交接处，音符流向交接处「落键」（仅显示未演奏音符）。
+   */
+  judgeAtKeyboard?: boolean;
 }
 
 /** 左侧键盘宽度（CSS px）。 */
@@ -126,7 +131,8 @@ export function PianoRoll(props: PianoRollProps) {
     const autoFollow = props.follow && props.isPlaying;
     let scrollX: number;
     if (autoFollow) {
-      const anchor = visibleMs * 0.4;
+      // 判定线固定在交接处时锚点为 0（当前时刻落在 naLo）；否则悬在音符区 40% 处
+      const anchor = props.judgeAtKeyboard ? 0 : visibleMs * 0.4;
       scrollX = clamp(props.currentTimeMs - anchor, 0, maxScroll);
       userScrollX = scrollX;
     } else {
@@ -219,10 +225,10 @@ export function PianoRoll(props: PianoRollProps) {
     // 键盘：先以 bg 覆盖键盘区（时间轴上 KEYBOARD_W 宽、全音高轴）
     ctx.fillStyle = bg;
     fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
-    // 像真实钢琴：黑键长度（沿时间）为白键一半、贴远离音符区的一侧，且音高方向更窄
-    // （故音符连接处各键同宽，远端白键比黑键宽）。
+    // 像真实钢琴：黑键长度（沿时间）为白键一半、其「前端」贴着音符区（瀑布）一侧、音高方向更窄。
+    // 故靠音符区一侧黑白键交错（白比黑宽），远离音符区的一端只剩白键。
     const blackKeyLen = keyBodyLen / 2;
-    const blackKeyStart = kbAtStart ? keyBodyStart : keyBodyStart + keyBodyLen - blackKeyLen;
+    const blackKeyStart = kbAtStart ? keyBodyStart + keyBodyLen - blackKeyLen : keyBodyStart;
     const blackInset = cell * 0.16; // 黑键音高方向两侧各内缩，使其更窄
     const darkKey = `color-mix(in oklch, ${fg} 82%, ${bg})`;
     const lightBorder = `color-mix(in oklch, ${border} 60%, transparent)`;
@@ -247,8 +253,15 @@ export function PianoRoll(props: PianoRollProps) {
         ctx.fillStyle = pressed ? primaryFg : mutedFg;
         ctx.font = '9px ui-sans-serif, system-ui';
         const label = `C${Math.floor(p / 12) - 1}`;
-        if (vertical) ctx.fillText(label, p0 + 1, keyBodyStart + keyBodyLen - 2);
-        else ctx.fillText(label, keyBodyStart + 2, p0 + cell - 2);
+        // 标签放在远离音符区（外侧）的一端，避免压住贴着音符区的黑键
+        if (vertical) {
+          const ly = kbAtStart ? keyBodyStart + 9 : keyBodyStart + keyBodyLen - 3;
+          ctx.fillText(label, p0 + 1, ly);
+        } else {
+          ctx.textAlign = kbAtStart ? 'left' : 'right';
+          ctx.fillText(label, kbAtStart ? keyBodyStart + 2 : keyBodyStart + keyBodyLen - 2, p0 + cell - 2);
+          ctx.textAlign = 'left';
+        }
       }
     }
     // 键盘与音符区的分隔线
@@ -316,6 +329,7 @@ export function PianoRoll(props: PianoRollProps) {
     void props.orientation; // 卷帘朝向切换后重绘
     void props.pitchAscending; // 音高方向切换后重绘
     void props.keyboardFlip; // 键盘位置切换后重绘
+    void props.judgeAtKeyboard; // 判定线位置切换后重绘
     void isDark(); // 深浅色切换后重绘，使画布配色同步更新
     void themeColor(); // 主题色切换后重绘（播放指针颜色）
     draw();

@@ -11,6 +11,7 @@ import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
 import { currentTimeMs, ensurePiano, isPlaying, play, stop } from '~/stores/player';
 import { SiteHeader } from '~/components/SiteHeader';
+import { canInstall, promptInstall } from '~/lib/pwa';
 import { HighlightedCode } from '~/components/HighlightedCode';
 import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
@@ -69,11 +70,18 @@ export default function Guide() {
         <p class="mx-auto mt-4 max-w-2xl text-balance text-muted-foreground">
           {t('guide.heroSubtitle')}
         </p>
-        <div class="mt-7 flex items-center justify-center gap-3">
+        <div class="mt-7 flex flex-wrap items-center justify-center gap-3">
           <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
             {t('guide.heroCta')}
             <Icon icon="lucide:arrow-right" />
           </Button>
+          {/* 安装 PWA：仅当浏览器提供安装入口时显示（部分浏览器无原生入口） */}
+          <Show when={canInstall()}>
+            <Button size="lg" variant="outline" class="gap-2" onClick={() => void promptInstall()}>
+              <Icon icon="lucide:download" />
+              {t('guide.installApp')}
+            </Button>
+          </Show>
         </div>
       </section>
 

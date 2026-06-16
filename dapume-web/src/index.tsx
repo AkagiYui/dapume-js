@@ -3,6 +3,21 @@ import './app.css';
 import { render } from 'solid-js/web';
 import { RouterProvider, createRouter } from '@tanstack/solid-router';
 import { routeTree } from './routeTree.gen';
+import { isStandalone, rememberPath, takeStartPath } from './lib/pwa';
+
+// PWA 启动恢复：独立窗口下、当前在起始页(/)、且存在已保存的其它路径时，
+// 在创建路由前改写地址，使路由直接渲染上次访问的页面（无闪烁）。
+if (isStandalone()) {
+  const last = takeStartPath();
+  const here = window.location.pathname + window.location.search;
+  if (last && last !== here && window.location.pathname === '/') {
+    try {
+      window.history.replaceState(null, '', last);
+    } catch {
+      /* 忽略 */
+    }
+  }
+}
 
 const router = createRouter({
   routeTree,
@@ -26,6 +41,12 @@ if (root) {
   // 这里我们用 render()（非 hydrate），先清空预渲染内容再挂载客户端 SPA。
   root.textContent = '';
   render(() => <RouterProvider router={router} />, root);
+
+  // 记住当前路径，供 PWA 下次启动恢复到上次访问的页面
+  rememberPath(window.location.pathname + window.location.search);
+  router.subscribe('onResolved', () => {
+    rememberPath(window.location.pathname + window.location.search);
+  });
 
   // 页面加载完成后，空闲时主动预加载各主要页面的代码块（不再仅在 hover 导航按钮时才预加载）。
   // 直接 import 页面模块即可命中并缓存其分包，后续导航无需等待下载。

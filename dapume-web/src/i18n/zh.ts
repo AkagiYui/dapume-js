@@ -78,6 +78,7 @@ export const zh = {
     tocTitle: '目录',
     playExample: '播放示例',
     backToTop: '回到顶部',
+    installApp: '安装应用',
   },
   manager: {
     title: '我的乐谱',
@@ -116,6 +117,8 @@ export const zh = {
     pianoOrientation: '卷帘朝向（横向 / 纵向）',
     pianoKeyDir: '琴键方向（高音 ↔ 低音）',
     pianoKeyboardPos: '琴键位置（左·底 ↔ 右·顶）',
+    pianoJudgeLine: '判定线位置（悬空 ↔ 贴键盘）',
+    pianoCenter: '钢琴卷帘居中（三栏布局）',
     visualDelay: '视觉延迟（适配无线耳机）',
     loadingPiano: '正在加载钢琴音色…',
     pianoReady: '音色就绪',

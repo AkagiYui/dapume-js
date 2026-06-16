@@ -158,6 +158,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 键盘位置：OFF=横向在左/纵向在底；ON=横向在右/纵向在顶
   const [pianoKbFlip, setPianoKbFlip] = createSignal(lsGet('dapume.pianoKbFlip', 'false') === 'true');
   createEffect(() => lsSet('dapume.pianoKbFlip', String(pianoKbFlip())));
+  // 判定线位置：OFF=悬在音符区 40% 处；ON=固定在琴键与音符区交接处
+  const [pianoJudgeKb, setPianoJudgeKb] = createSignal(lsGet('dapume.pianoJudgeKb', 'false') === 'true');
+  createEffect(() => lsSet('dapume.pianoJudgeKb', String(pianoJudgeKb())));
+  // 钢琴卷帘居中（宽屏左中右三栏布局）：OFF=卷帘在底部；ON=编辑器|卷帘|操作 三栏
+  const [pianoCenter, setPianoCenter] = createSignal(lsGet('dapume.pianoCenter', 'false') === 'true');
+  createEffect(() => lsSet('dapume.pianoCenter', String(pianoCenter())));
 
   // 视觉延迟（毫秒）：把卷帘与高亮整体延后，以适配无线耳机的音频延迟
   const [delayMs, setDelayMs] = createSignal(
@@ -342,6 +348,22 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           <SwitchThumb />
         </SwitchControl>
       </Switch>
+      {/* 钢琴卷帘居中三栏：仅宽屏布局有效 */}
+      <Show when={!isNarrow()}>
+        <Switch
+          checked={pianoCenter()}
+          onChange={setPianoCenter}
+          class="flex items-center justify-between"
+        >
+          <SwitchLabel class="flex items-center gap-1.5 text-sm">
+            <Icon icon="lucide:columns-3" />
+            {t('workbench.pianoCenter')}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+      </Show>
     </div>
   );
 
@@ -447,6 +469,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         pitchAscending={pianoAsc()}
         orientation={pianoVertical() ? 'vertical' : 'horizontal'}
         keyboardFlip={pianoKbFlip()}
+        judgeAtKeyboard={pianoJudgeKb()}
       />
     </Show>
   );
@@ -512,6 +535,13 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           icon="lucide:flip-horizontal-2"
           rotate={pianoVertical()}
           label={t('workbench.pianoKeyboardPos')}
+        />
+        <MiniSwitch
+          checked={pianoJudgeKb()}
+          onChange={setPianoJudgeKb}
+          icon="lucide:scan-line"
+          rotate={pianoVertical()}
+          label={t('workbench.pianoJudgeLine')}
         />
       </div>
       <Show when={pianoState() === 'loading'}>
@@ -674,32 +704,57 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     >
       {/* ===== 宽屏：可拖动分栏（尺寸持久化）===== */}
       <div class="h-[100dvh] w-full overflow-hidden bg-background">
-        <Resizable
-          orientation="vertical"
-          initialSizes={readSizes('dapume.layout.v', [0.6, 0.4])}
-          onSizesChange={(s) => writeSizes('dapume.layout.v', s)}
-        >
-          <ResizablePanel minSize={0.25} class="overflow-hidden">
+        <Show
+          when={pianoCenter()}
+          fallback={
+            /* 默认：上区（编辑器 | 操作），下区（钢琴卷帘，可完全收起） */
             <Resizable
-              orientation="horizontal"
-              initialSizes={readSizes('dapume.layout.h', [0.58, 0.42])}
-              onSizesChange={(s) => writeSizes('dapume.layout.h', s)}
+              orientation="vertical"
+              initialSizes={readSizes('dapume.layout.v', [0.6, 0.4])}
+              onSizesChange={(s) => writeSizes('dapume.layout.v', s)}
             >
-              <ResizablePanel minSize={0.3} class="overflow-hidden">
-                <EditorPane />
+              <ResizablePanel minSize={0.25} class="overflow-hidden">
+                <Resizable
+                  orientation="horizontal"
+                  initialSizes={readSizes('dapume.layout.h', [0.58, 0.42])}
+                  onSizesChange={(s) => writeSizes('dapume.layout.h', s)}
+                >
+                  <ResizablePanel minSize={0.3} class="overflow-hidden">
+                    <EditorPane />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel minSize={0.25} class="overflow-hidden">
+                    <ControlsPane />
+                  </ResizablePanel>
+                </Resizable>
               </ResizablePanel>
               <ResizableHandle withHandle />
-              <ResizablePanel minSize={0.25} class="overflow-hidden">
-                <ControlsPane />
+              {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
+              <ResizablePanel minSize={0} collapsible class="overflow-hidden">
+                <PianoRollPane />
               </ResizablePanel>
             </Resizable>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
-          <ResizablePanel minSize={0} collapsible class="overflow-hidden">
-            <PianoRollPane />
-          </ResizablePanel>
-        </Resizable>
+          }
+        >
+          {/* 三栏：编辑器 | 钢琴卷帘 | 操作 */}
+          <Resizable
+            orientation="horizontal"
+            initialSizes={readSizes('dapume.layout.h3', [0.4, 0.34, 0.26])}
+            onSizesChange={(s) => writeSizes('dapume.layout.h3', s)}
+          >
+            <ResizablePanel minSize={0.2} class="overflow-hidden">
+              <EditorPane />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel minSize={0.2} class="overflow-hidden">
+              <PianoRollPane />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel minSize={0.2} class="overflow-hidden">
+              <ControlsPane />
+            </ResizablePanel>
+          </Resizable>
+        </Show>
       </div>
     </Show>
   );

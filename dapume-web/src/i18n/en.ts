@@ -81,6 +81,7 @@ export const en: typeof zh = {
     tocTitle: 'Contents',
     playExample: 'Play example',
     backToTop: 'Back to top',
+    installApp: 'Install app',
   },
   manager: {
     title: 'My scores',
@@ -119,6 +120,8 @@ export const en: typeof zh = {
     pianoOrientation: 'Roll orientation (horizontal / vertical)',
     pianoKeyDir: 'Key direction (high ↔ low)',
     pianoKeyboardPos: 'Keyboard position (left·bottom ↔ right·top)',
+    pianoJudgeLine: 'Judgment line (floating ↔ at keyboard)',
+    pianoCenter: 'Center the piano roll (3-column layout)',
     visualDelay: 'Visual delay (for wireless earbuds)',
     loadingPiano: 'Loading piano samples…',
     pianoReady: 'Samples ready',
