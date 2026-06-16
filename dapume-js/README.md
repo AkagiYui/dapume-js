@@ -1,8 +1,14 @@
 # dapume-js
 
+[![npm version](https://img.shields.io/npm/v/dapume-js?logo=npm&color=%23cb3837)](https://npmx.dev/package/dapume-js)
+[![npm downloads](https://img.shields.io/npm/dm/dapume-js?color=%2334d399)](https://npmx.dev/package/dapume-js)
+[![license](https://img.shields.io/npm/l/dapume-js?color=%236366f1)](https://npmx.dev/package/dapume-js)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/dapume-js?label=minzip)](https://npmx.dev/package/dapume-js)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-dapume--vscode-007ACC?logo=visualstudiocode&logoColor=white)](https://marketplace.visualstudio.com/items?itemName=AkagiYui.dapume-vscode)
+
 > 打谱么 —— 将**线性乐谱（dapume）**解析为乐谱对象，并渲染为 MIDI 文件。
 
-`dapume-js` 是 Python 项目 [`dapume`](../dapume-py)（dapume-py）的 TypeScript 移植：解析行为与原版一致，并把乐谱渲染为**标准 MIDI 文件**（format 1，写入真实 tempo 与按拍对齐的 tick，便于 DAW 使用）。它不依赖任何运行时库，可在 **Node** 与**浏览器**环境中运行，并额外提供「源字符位置追踪」与「语法分词」以支撑编辑器类应用（如在线谱面编辑、播放高亮）。
+`dapume-js` 是 Python 项目 [`dapume`](https://github.com/ScarlettRinko/dapume)（dapume-py）的 TypeScript 移植：解析行为与原版一致，并把乐谱渲染为**标准 MIDI 文件**（format 1，写入真实 tempo 与按拍对齐的 tick，便于 DAW 使用）。它不依赖任何运行时库，可在 **Node** 与**浏览器**环境中运行，并额外提供「源字符位置追踪」与「语法分词」以支撑编辑器类应用（如在线谱面编辑、播放高亮）。
 
 > 本库只负责「文本 → 乐谱对象 → MIDI」。把 MIDI 转换为音频是另外的事情（例如用音源/采样器播放），不在本库职责范围内。
 
@@ -173,7 +179,7 @@ interface Token {
 - `[1/5]`：一级大三和弦第二转位
 - `[5/7,]`：低两个八度演奏
 
-> 和弦默认比旋律低八度，可在末尾追加 `,`/`.` 调整八度。完整的级数 / 类型 / 后缀 / 转位规则与 dapume-py 一致，详见 [dapume-py 的说明](../dapume-py/README.md)。
+> 和弦默认比旋律低八度，可在末尾追加 `,`/`.` 调整八度。完整的级数 / 类型 / 后缀 / 转位规则与 dapume-py 一致，详见 [dapume-py 的说明](https://github.com/ScarlettRinko/dapume)。
 
 ---
 

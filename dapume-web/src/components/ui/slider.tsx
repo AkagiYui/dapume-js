@@ -17,7 +17,12 @@ export const Slider = <T extends ValidComponent = 'div'>(
   const [local, others] = splitProps(props as SliderRootProps, ['class']);
   return (
     <SliderPrimitive.Root
-      class={cn('relative flex w-full touch-none select-none flex-col items-center', local.class)}
+      class={cn(
+        // px-2 让轨道两端内缩半个把手宽度：把手在最小/最大值时不会越出滑块盒、
+        // 不再遮挡相邻文字或贴住相邻按钮。
+        'relative flex w-full touch-none select-none flex-col items-center px-2',
+        local.class,
+      )}
       {...others}
     />
   );

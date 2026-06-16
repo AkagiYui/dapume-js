@@ -217,11 +217,13 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
-    // 当前发声的音高（用于「按下」反色）
-    const activePitches = new Set<number>();
+    // 当前发声的音高 → 其音轨色：「按下」高亮用与瀑布音符相同的颜色，
+    // 任何主题色 / 明暗模式下都清晰可见（主色为黑时也不会在黑键上看不出）。
+    const activePitchColor = new Map<number, string>();
     for (const n of props.notes) {
       if (n.startTime <= props.currentTimeMs && props.currentTimeMs < n.startTime + n.duration) {
-        activePitches.add(Math.max(0, Math.min(127, n.pitch)));
+        const ap = Math.max(0, Math.min(127, n.pitch));
+        if (!activePitchColor.has(ap)) activePitchColor.set(ap, trackColor(n.trackNo, 1));
       }
     }
 
@@ -238,17 +240,18 @@ export function PianoRoll(props: PianoRollProps) {
     for (let p = lo; p <= hi; p++) {
       const p0 = pPos(p);
       const isBlack = BLACK_KEYS.has(((p % 12) + 12) % 12);
-      const pressed = activePitches.has(p);
-      // 白键整格 + 边界（按下则用主色反白）
+      const pressFill = activePitchColor.get(p);
+      const pressed = pressFill !== undefined;
+      // 白键整格 + 边界（按下则用该音符的音轨色高亮）
       if (!isBlack && pressed) {
-        ctx.fillStyle = primary;
+        ctx.fillStyle = pressFill;
         fillRect(keyBodyStart, keyBodyLen, p0, cell);
       }
       ctx.strokeStyle = lightBorder;
       strokeRect(keyBodyStart + 0.5, keyBodyLen, p0 + 0.5, cell);
-      // 黑键：半长 + 更窄，贴外侧（按下则用主色）
+      // 黑键：半长 + 更窄，前端贴音符区（按下则用音轨色高亮）
       if (isBlack) {
-        ctx.fillStyle = pressed ? primary : darkKey;
+        ctx.fillStyle = pressed ? pressFill : darkKey;
         fillRect(blackKeyStart, blackKeyLen, p0 + blackInset, cell - 2 * blackInset);
       }
       // 每个 C 标注音名（C 是白键，整条都可写）
@@ -329,11 +332,14 @@ export function PianoRoll(props: PianoRollProps) {
   function onPointerMove(e: PointerEvent) {
     if (!panning) return;
     const vertical = props.orientation === 'vertical';
-    // 沿时间轴的位移：拖动内容跟随手指（向前拖看过去），与滚轮一致取相反号
+    // 时间轴方向随键盘位置（kbAtStart）翻转，平移符号需随之翻转，否则
+    // 「纵向 + 键盘在底」等布局下拖动方向会与内容相反。
+    const kbAtStart = vertical ? !!props.keyboardFlip : !props.keyboardFlip;
     const along = vertical ? e.clientY - panLastY : e.clientX - panLastX;
     panLastX = e.clientX;
     panLastY = e.clientY;
-    userScrollX = Math.max(0, userScrollX - along / pxPerMs);
+    // 让内容跟随手指：kbAtStart 时时间正向（取相反号），否则时间反向（取同号）
+    userScrollX = Math.max(0, userScrollX + ((kbAtStart ? -along : along) / pxPerMs));
     draw();
   }
   function onPointerUp(e: PointerEvent) {

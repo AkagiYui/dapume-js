@@ -306,7 +306,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
    * 窄屏空间紧张时，实时调号/速度可被截断，音符/音轨数始终可见（靠右、不撑破顶栏）。 */
   const ScoreStats = (p: { class?: string }) => (
     <div class={`flex items-center gap-2 text-xs text-muted-foreground ${p.class ?? ''}`}>
-      <Show when={isPlaying()}>
+      {/* 播放或暂停（playActive）时编辑都已锁定，故都显示小锁 */}
+      <Show when={playActive()}>
         <InfoTip label={t('workbench.playingLocked')} class="shrink-0 text-amber-500">
           <Icon icon="lucide:lock" />
         </InfoTip>
@@ -674,9 +675,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   /** 钢琴卷帘标题栏右侧信息（跟随/朝向/琴键方向/琴键位置开关 + 加载进度 + 操作提示）。 */
   const PianoRollInfo = () => (
-    <div class="flex items-center gap-3">
+    <div class="flex min-w-0 items-center gap-3">
       {/* 切换：跟随播放、卷帘朝向、琴键方向、琴键位置；纵向时把后两个图标旋转 90° */}
-      <div class="flex items-center gap-2">
+      <div class="flex shrink-0 items-center gap-2">
         <MiniSwitch
           checked={follow()}
           onChange={setFollow}
@@ -713,61 +714,67 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         />
       </div>
       <Show when={pianoState() === 'loading'}>
-        <span class="flex items-center gap-1 text-xs text-muted-foreground">
+        <span class="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
           <Icon icon="lucide:loader-circle" class="animate-spin" />
           {t('workbench.loadingPiano')} {Math.round(loadProgress() * 100)}%
         </span>
       </Show>
-      <span class="hidden text-xs text-muted-foreground sm:inline">
+      {/* 操作提示：溢出省略、不换行 */}
+      <span class="hidden min-w-0 shrink truncate text-xs text-muted-foreground sm:block">
         {locale() === 'zh' ? '滚轮平移 · Ctrl+滚轮缩放' : 'Wheel: pan · Ctrl+Wheel: zoom'}
       </span>
     </div>
   );
 
   // ===== 宽屏分区 =====
-  // 操作区已整体移除：播放控制进编辑器顶栏中间，开关/延迟进设置模态框，速查/示例进帮助模态框，
-  // 下载用下载模态框。顶栏：左=返回(图标)+标题，中=播放控制，右=乐谱信息+模态框按钮。
-  const EditorPane = () => (
-    <div class="flex h-full flex-col">
-      <div class="flex items-center gap-2 border-b px-2 py-1.5">
-        <div class="flex min-w-0 flex-1 items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            class="size-8 shrink-0"
-            onClick={() => navigate({ to: '/workbench' })}
-            aria-label={t('manager.title')}
-          >
-            <Icon icon="lucide:arrow-left" />
-          </Button>
-          <span class="min-w-0 truncate text-sm font-medium" title={props.doc.title}>
-            {props.doc.title}
-          </span>
-        </div>
-        <CompactPlayback />
-        <div class="flex min-w-0 flex-1 items-center justify-end gap-2">
-          <ScoreStats />
-          <div class="flex shrink-0 items-center gap-0.5">
-            <HelpModalButton />
-            <SettingsModalButton extra={<WorkbenchSettings />} />
-            <DownloadModalButton />
-          </div>
-        </div>
+  // 操作区已整体移除。顶栏抽到「整页级」（占满页面宽度、在分栏之上）：
+  // 左=返回(图标)+标题，中=播放控制，右=乐谱信息+模态框按钮。
+  const WorkbenchTopBar = () => (
+    <div class="flex items-center gap-2 border-b px-2 py-1.5">
+      <div class="flex min-w-0 flex-1 items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          class="size-8 shrink-0"
+          onClick={() => navigate({ to: '/workbench' })}
+          aria-label={t('manager.title')}
+        >
+          <Icon icon="lucide:arrow-left" />
+        </Button>
+        <span class="min-w-0 truncate text-sm font-medium" title={props.doc.title}>
+          {props.doc.title}
+        </span>
       </div>
-      <div class="min-h-0 flex-1">
-        <EditorBody />
+      <CompactPlayback />
+      <div class="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <ScoreStats />
+        <div class="flex shrink-0 items-center gap-0.5">
+          <HelpModalButton />
+          <SettingsModalButton extra={<WorkbenchSettings />} />
+          <DownloadModalButton />
+        </div>
       </div>
     </div>
   );
 
+  // 编辑器面板：顶栏已抽到整页级，此处只剩编辑器本体。
+  const EditorPane = () => (
+    <div class="h-full min-h-0">
+      <EditorBody />
+    </div>
+  );
+
+  // 钢琴卷帘面板：卷帘在上、标题与开关栏在下（顶栏改底栏）。标题/提示溢出省略、不换行。
   const PianoRollPane = () => (
     <div class="flex h-full flex-col">
-      <div class="flex items-center justify-between border-b px-3 py-1.5">
-        <span class="text-sm font-medium">{t('workbench.pianoRollTitle')}</span>
-        <PianoRollInfo />
-      </div>
       <div class="min-h-0 flex-1">
         <PianoRollBody />
+      </div>
+      <div class="flex items-center justify-between gap-2 border-t px-3 py-1.5">
+        <span class="min-w-0 shrink truncate text-sm font-medium">
+          {t('workbench.pianoRollTitle')}
+        </span>
+        <PianoRollInfo />
       </div>
     </div>
   );
@@ -879,43 +886,46 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </div>
       }
     >
-      {/* ===== 宽屏：仅「编辑器 + 钢琴卷帘」两区，可拖动分栏（尺寸持久化）。
+      {/* ===== 宽屏：整页级顶栏（占满页面宽度）+ 下方「编辑器 + 钢琴卷帘」可拖动分栏。
           pianoCenter 关：上下堆叠（编辑器在上、卷帘在下，可完全收起）；
           pianoCenter 开：左右并排（编辑器 | 卷帘）。===== */}
-      <div class="h-[100dvh] w-full overflow-hidden bg-background">
-        <Show
-          when={pianoCenter()}
-          fallback={
+      <div class="flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
+        <WorkbenchTopBar />
+        <div class="min-h-0 flex-1">
+          <Show
+            when={pianoCenter()}
+            fallback={
+              <Resizable
+                orientation="vertical"
+                initialSizes={readSizes('dapume.layout.v', [0.6, 0.4])}
+                onSizesChange={(s) => writeSizes('dapume.layout.v', s)}
+              >
+                <ResizablePanel minSize={0.25} class="overflow-hidden">
+                  <EditorPane />
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
+                <ResizablePanel minSize={0} collapsible class="overflow-hidden">
+                  <PianoRollPane />
+                </ResizablePanel>
+              </Resizable>
+            }
+          >
             <Resizable
-              orientation="vertical"
-              initialSizes={readSizes('dapume.layout.v', [0.6, 0.4])}
-              onSizesChange={(s) => writeSizes('dapume.layout.v', s)}
+              orientation="horizontal"
+              initialSizes={readSizes('dapume.layout.side', [0.55, 0.45])}
+              onSizesChange={(s) => writeSizes('dapume.layout.side', s)}
             >
               <ResizablePanel minSize={0.25} class="overflow-hidden">
                 <EditorPane />
               </ResizablePanel>
               <ResizableHandle withHandle />
-              {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
-              <ResizablePanel minSize={0} collapsible class="overflow-hidden">
+              <ResizablePanel minSize={0.2} collapsible class="overflow-hidden">
                 <PianoRollPane />
               </ResizablePanel>
             </Resizable>
-          }
-        >
-          <Resizable
-            orientation="horizontal"
-            initialSizes={readSizes('dapume.layout.side', [0.55, 0.45])}
-            onSizesChange={(s) => writeSizes('dapume.layout.side', s)}
-          >
-            <ResizablePanel minSize={0.25} class="overflow-hidden">
-              <EditorPane />
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel minSize={0.2} collapsible class="overflow-hidden">
-              <PianoRollPane />
-            </ResizablePanel>
-          </Resizable>
-        </Show>
+          </Show>
+        </div>
       </div>
     </Show>
     {/* 载入示例 / 清空的覆盖确认（受 pendingLoad 控制，Portal 渲染于两种布局之外） */}
