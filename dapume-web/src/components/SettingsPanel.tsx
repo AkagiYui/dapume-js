@@ -168,13 +168,12 @@ export function SettingsModalButton(props: { extra?: JSX.Element }) {
         }}
       >
         <DialogTitle class="mb-4">{t('settings.title')}</DialogTitle>
-        <div class="max-h-[70dvh] overflow-y-auto">
-          <SettingsPanel />
-          <Show when={props.extra}>
-            <Separator class="my-4" />
-            {props.extra}
-          </Show>
-        </div>
+        {/* 工作台相关设置在前，外观设置在后；不加内层滚动容器，内容完整展示 */}
+        <Show when={props.extra}>
+          {props.extra}
+          <Separator class="my-4" />
+        </Show>
+        <SettingsPanel />
       </DialogContent>
     </Dialog>
   );

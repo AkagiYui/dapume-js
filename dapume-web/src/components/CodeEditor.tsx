@@ -213,8 +213,10 @@ function stickyHeaderPlugin() {
 
       jump() {
         if (this.current == null) return;
-        const line = this.view.state.doc.line(this.current);
-        this.view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start' }) });
+        const v = this.view;
+        // 平滑滚动回该参数行（停在视口顶部），而非瞬间跳转
+        const block = v.lineBlockAt(v.state.doc.line(this.current).from);
+        v.scrollDOM.scrollTo({ top: block.top, behavior: 'smooth' });
       }
     },
   );
@@ -320,10 +322,14 @@ export function CodeEditor(props: CodeEditorProps) {
     // 仅当「当前演奏行号」改变时才滚动，把该行锚定到视口约 40% 处：
     // 每行至多滚动一次，避免逐音符重复滚动造成的抖动闪烁。
     if (props.keepVisible && ranges.length > 0) {
-      const line = v.state.doc.lineAt(Math.min(ranges[0]!.from, v.state.doc.length)).number;
+      // 当前发声音符可能同时跨多行（多轨 / 长音叠加）。锚定到「最靠上的发声行」
+      // （源位置最小者），避免 ranges[0] 在多个发声行间来回切换导致反复滚动跳变。
+      let minPos = ranges[0]!.from;
+      for (const r of ranges) if (r.from < minPos) minPos = r.from;
+      const line = v.state.doc.lineAt(Math.min(minPos, v.state.doc.length)).number;
       if (line !== lastScrolledLine) {
         lastScrolledLine = line;
-        scrollLineToAnchor(v, ranges[0]!.from, props.smoothScroll !== false);
+        scrollLineToAnchor(v, minPos, props.smoothScroll !== false);
       }
     } else {
       lastScrolledLine = -1; // 停止/无高亮时复位，下次播放重新锚定

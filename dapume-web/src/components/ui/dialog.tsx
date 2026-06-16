@@ -21,11 +21,11 @@ export const DialogContent = <T extends ValidComponent = 'div'>(
   const [local, others] = splitProps(props as DialogContentProps, ['class', 'children']);
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay class="fixed inset-0 z-50 bg-black/50 animate-in fade-in-0" />
+      <DialogPrimitive.Overlay class="fixed inset-0 z-50 bg-black/50 duration-200 data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[closed]:animate-out data-[closed]:fade-out-0" />
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <DialogPrimitive.Content
           class={cn(
-            'relative w-full max-w-md rounded-lg border bg-background p-6 shadow-lg animate-in fade-in-0 zoom-in-95',
+            'relative w-full max-w-md rounded-lg border bg-background p-6 shadow-lg duration-200 data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95 data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95',
             local.class,
           )}
           {...others}

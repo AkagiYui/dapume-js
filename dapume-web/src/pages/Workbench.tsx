@@ -26,6 +26,7 @@ import { Slider, SliderFill, SliderThumb, SliderTrack } from '~/components/ui/sl
 import { Resizable, ResizableHandle, ResizablePanel } from '~/components/ui/resizable';
 import { BottomDrawer } from '~/components/ui/drawer';
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
+import { InfoTip } from '~/components/ui/tooltip';
 
 import { EXAMPLES } from '~/data/examples';
 import { saveScoreContent, setLastScoreId } from '~/stores/scores';
@@ -253,6 +254,26 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   window.addEventListener('keydown', onSpace);
   onCleanup(() => window.removeEventListener('keydown', onSpace));
 
+  // 去重并排序的音符起始时刻，用于「上一个 / 下一个音符」按帧步进（仅停止 / 暂停态可用）
+  const onsetTimes = createMemo(() => {
+    const set = new Set<number>();
+    for (const n of score().notes) set.add(n.startTime);
+    return [...set].sort((a, b) => a - b);
+  });
+  function seekToNextNote() {
+    const t = onsetTimes().find((x) => x > currentTimeMs() + 1);
+    if (t !== undefined) seek(t);
+  }
+  function seekToPrevNote() {
+    const arr = onsetTimes();
+    let prev = 0;
+    for (const x of arr) {
+      if (x < currentTimeMs() - 1) prev = x;
+      else break;
+    }
+    seek(prev);
+  }
+
   // 以乐谱标题作为下载文件名（过滤掉文件名非法字符）
   const fileName = (ext: string) =>
     `${(props.doc.title || 'score').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'score'}.${ext}`;
@@ -286,27 +307,27 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const ScoreStats = (p: { class?: string }) => (
     <div class={`flex items-center gap-2 text-xs text-muted-foreground ${p.class ?? ''}`}>
       <Show when={isPlaying()}>
-        <Icon icon="lucide:lock" class="shrink-0 text-amber-500" title={t('workbench.playingLocked')} />
+        <InfoTip label={t('workbench.playingLocked')} class="shrink-0 text-amber-500">
+          <Icon icon="lucide:lock" />
+        </InfoTip>
       </Show>
-      {/* 播放/暂停时，在音符数左侧实时显示当前 1=调号 与 bpm */}
+      {/* 播放/暂停时，在音符数左侧实时显示当前 1=调号 与 bpm（自解释，无需提示） */}
       <Show when={playActive()}>
-        <span
-          class="flex min-w-0 shrink items-center gap-1.5 truncate font-medium text-foreground tabular-nums"
-          title="1= / bpm"
-        >
+        <span class="flex min-w-0 shrink items-center gap-1.5 truncate font-medium text-foreground tabular-nums">
           <span>1={liveParams().key}</span>
           <span class="opacity-60">·</span>
           <span>{liveParams().bpm}bpm</span>
         </span>
       </Show>
-      <span class="flex shrink-0 items-center gap-1 tabular-nums" title={t('workbench.notes')}>
+      {/* 用组件库 tooltip 取代原生 title：桌面 hover、移动端点击均可弹出说明 */}
+      <InfoTip label={t('workbench.notes')} class="shrink-0 gap-1 tabular-nums">
         <Icon icon="lucide:music" />
         {score().notes.length}
-      </span>
-      <span class="flex shrink-0 items-center gap-1 tabular-nums" title={t('workbench.tracks')}>
+      </InfoTip>
+      <InfoTip label={t('workbench.tracks')} class="shrink-0 gap-1 tabular-nums">
         <Icon icon="lucide:layers" />
         {score().trackCount}
-      </span>
+      </InfoTip>
     </div>
   );
 
@@ -341,24 +362,58 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </Slider>
   );
 
-  /** 播放控制（用于宽屏操作区顶部）。 */
-  const PlaybackControls = () => (
-    <div class="space-y-3">
-      <div class="flex items-center gap-2">
-        <Button class="gap-1.5" onClick={onPlayPause} disabled={score().notes.length === 0}>
-          <Icon icon={isPlaying() ? 'lucide:pause' : 'lucide:play'} />
-          {isPlaying() ? t('workbench.pause') : t('workbench.play')}
+  /** 紧凑播放控制（放在乐谱编辑器顶栏中间，单行、不撑高顶栏）：
+   * 上一个音符 / 播放暂停 / 停止 / 下一个音符 + 进度条（大屏附时间）。 */
+  const CompactPlayback = () => {
+    const noNotes = () => score().notes.length === 0;
+    const stepDisabled = () => isPlaying() || noNotes();
+    return (
+      <div class="flex shrink-0 items-center gap-0.5">
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-7"
+          onClick={seekToPrevNote}
+          disabled={stepDisabled()}
+          aria-label={t('workbench.prevNote')}
+        >
+          <Icon icon="lucide:step-back" />
         </Button>
-        <Button variant="outline" size="icon" onClick={() => stop()} aria-label={t('workbench.stop')}>
+        <Button
+          size="icon"
+          class="size-8"
+          onClick={onPlayPause}
+          disabled={noNotes()}
+          aria-label={isPlaying() ? t('workbench.pause') : t('workbench.play')}
+        >
+          <Icon icon={isPlaying() ? 'lucide:pause' : 'lucide:play'} />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-7"
+          onClick={() => stop()}
+          aria-label={t('workbench.stop')}
+        >
           <Icon icon="lucide:square" />
         </Button>
-        <div class="ml-auto text-xs tabular-nums text-muted-foreground">
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-7"
+          onClick={seekToNextNote}
+          disabled={stepDisabled()}
+          aria-label={t('workbench.nextNote')}
+        >
+          <Icon icon="lucide:step-forward" />
+        </Button>
+        <span class="mx-1 hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground lg:inline">
           {fmt(currentTimeMs())} / {fmt(score().durationMs)}
-        </div>
+        </span>
+        <ProgressSlider class="w-28 lg:w-44" />
       </div>
-      <ProgressSlider class="py-1" />
-    </div>
-  );
+    );
+  };
 
   /** 开关：保持当前演奏行可视 / 平滑滚动 / 参数行粘性置顶（「跟随播放」已移至钢琴卷帘标题栏）。 */
   const ToggleSwitches = () => (
@@ -398,7 +453,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           class="flex items-center justify-between"
         >
           <SwitchLabel class="flex items-center gap-1.5 text-sm">
-            <Icon icon="lucide:columns-3" />
+            <Icon icon="lucide:columns-2" />
             {t('workbench.pianoCenter')}
           </SwitchLabel>
           <SwitchControl>
@@ -409,7 +464,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
-  /** 视觉延迟滑块：把卷帘/高亮整体延后，以适配无线耳机的音频延迟。 */
+  /** 视觉延迟滑块：把卷帘/高亮整体延后，以适配无线耳机的音频延迟。
+   * 两侧加减按钮便于触屏精调、避免边缘触发系统手势；也让把手不贴模态框边缘被遮挡。 */
   const DelaySlider = () => (
     <div class="space-y-2">
       <div class="flex items-center justify-between text-sm">
@@ -419,12 +475,41 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </span>
         <span class="tabular-nums text-muted-foreground">{delayMs()}ms</span>
       </div>
-      <Slider minValue={0} maxValue={500} step={10} value={[delayMs()]} onChange={(v) => setDelayMs(v[0]!)}>
-        <SliderTrack>
-          <SliderFill />
-          <SliderThumb />
-        </SliderTrack>
-      </Slider>
+      <div class="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          class="size-7 shrink-0"
+          onClick={() => setDelayMs(Math.max(0, delayMs() - 10))}
+          disabled={delayMs() <= 0}
+          aria-label={t('workbench.delayDown')}
+        >
+          <Icon icon="lucide:minus" />
+        </Button>
+        <Slider
+          class="min-w-0 flex-1"
+          minValue={0}
+          maxValue={500}
+          step={10}
+          value={[delayMs()]}
+          onChange={(v) => setDelayMs(v[0]!)}
+        >
+          <SliderTrack>
+            <SliderFill />
+            <SliderThumb />
+          </SliderTrack>
+        </Slider>
+        <Button
+          variant="outline"
+          size="icon"
+          class="size-7 shrink-0"
+          onClick={() => setDelayMs(Math.min(500, delayMs() + 10))}
+          disabled={delayMs() >= 500}
+          aria-label={t('workbench.delayUp')}
+        >
+          <Icon icon="lucide:plus" />
+        </Button>
+      </div>
     </div>
   );
 
@@ -572,23 +657,19 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     /** 为 true 时把图标逆时针旋转 90°（带过渡动画）。 */
     rotateCcw?: boolean;
   }) => (
-    <Switch
-      checked={p.checked}
-      onChange={p.onChange}
-      class="flex items-center gap-1"
-      title={p.label}
-      aria-label={p.label}
-    >
-      <SwitchLabel class="flex text-muted-foreground">
-        <Icon
-          icon={p.icon}
-          class={`inline-block transition-transform duration-300 ${p.rotate ? 'rotate-90' : ''} ${p.rotateCcw ? '-rotate-90' : ''}`}
-        />
-      </SwitchLabel>
-      <SwitchControl class="h-4 w-7">
-        <SwitchThumb class="size-3 data-[checked]:translate-x-3" />
-      </SwitchControl>
-    </Switch>
+    <InfoTip label={p.label} placement="bottom">
+      <Switch checked={p.checked} onChange={p.onChange} class="flex items-center gap-1" aria-label={p.label}>
+        <SwitchLabel class="flex text-muted-foreground">
+          <Icon
+            icon={p.icon}
+            class={`inline-block transition-transform duration-300 ${p.rotate ? 'rotate-90' : ''} ${p.rotateCcw ? '-rotate-90' : ''}`}
+          />
+        </SwitchLabel>
+        <SwitchControl class="h-4 w-7">
+          <SwitchThumb class="size-3 data-[checked]:translate-x-3" />
+        </SwitchControl>
+      </Switch>
+    </InfoTip>
   );
 
   /** 钢琴卷帘标题栏右侧信息（跟随/朝向/琴键方向/琴键位置开关 + 加载进度 + 操作提示）。 */
@@ -644,40 +725,37 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   );
 
   // ===== 宽屏分区 =====
+  // 操作区已整体移除：播放控制进编辑器顶栏中间，开关/延迟进设置模态框，速查/示例进帮助模态框，
+  // 下载用下载模态框。顶栏：左=返回(图标)+标题，中=播放控制，右=乐谱信息+模态框按钮。
   const EditorPane = () => (
     <div class="flex h-full flex-col">
-      <div class="flex items-center justify-between gap-2 border-b px-3 py-1.5">
-        <span class="min-w-0 shrink truncate text-sm font-medium" title={props.doc.title}>
-          {props.doc.title}
-        </span>
-        <ScoreStats />
+      <div class="flex items-center gap-2 border-b px-2 py-1.5">
+        <div class="flex min-w-0 flex-1 items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-8 shrink-0"
+            onClick={() => navigate({ to: '/workbench' })}
+            aria-label={t('manager.title')}
+          >
+            <Icon icon="lucide:arrow-left" />
+          </Button>
+          <span class="min-w-0 truncate text-sm font-medium" title={props.doc.title}>
+            {props.doc.title}
+          </span>
+        </div>
+        <CompactPlayback />
+        <div class="flex min-w-0 flex-1 items-center justify-end gap-2">
+          <ScoreStats />
+          <div class="flex shrink-0 items-center gap-0.5">
+            <HelpModalButton />
+            <SettingsModalButton extra={<WorkbenchSettings />} />
+            <DownloadModalButton />
+          </div>
+        </div>
       </div>
       <div class="min-h-0 flex-1">
         <EditorBody />
-      </div>
-    </div>
-  );
-
-  const ControlsPane = () => (
-    <div class="flex h-full flex-col">
-      <div class="flex items-center justify-between border-b px-3 py-1.5">
-        <Button variant="ghost" size="sm" class="gap-1.5" onClick={() => navigate({ to: '/workbench' })}>
-          <Icon icon="lucide:arrow-left" />
-          {t('manager.title')}
-        </Button>
-        <div class="flex items-center gap-1">
-          {/* 速查与示例、设置（含工作台开关）模态框；放在“操作”文字左边，仅图标 */}
-          <HelpModalButton />
-          <SettingsModalButton extra={<WorkbenchSettings />} />
-          <span class="ml-1 text-sm font-medium">{t('workbench.controlsTitle')}</span>
-        </div>
-      </div>
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        <div class="space-y-5 p-4">
-          <PlaybackControls />
-          <Separator />
-          <DownloadButtons />
-        </div>
       </div>
     </div>
   );
@@ -695,41 +773,63 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   );
 
   // ===== 窄屏底部播放条 =====
-  const NarrowPlayerBar = () => (
-    <div class="flex items-center gap-2 border-t bg-background px-3 py-2">
-      <Button
-        size="icon"
-        class="size-9 shrink-0"
-        onClick={onPlayPause}
-        disabled={score().notes.length === 0}
-        aria-label={isPlaying() ? t('workbench.pause') : t('workbench.play')}
-      >
-        <Icon icon={isPlaying() ? 'lucide:pause' : 'lucide:play'} />
-      </Button>
-      <Button
-        variant="outline"
-        size="icon"
-        class="size-9 shrink-0"
-        onClick={() => stop()}
-        aria-label={t('workbench.stop')}
-      >
-        <Icon icon="lucide:square" />
-      </Button>
-      <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(currentTimeMs())}</span>
-      {/* mx-2：留出空间，避免把手在两端遮住时间文字 */}
-      <ProgressSlider class="mx-2 flex-1" />
-      <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(score().durationMs)}</span>
-      <Button
-        variant={pianoOpen() ? 'default' : 'outline'}
-        size="icon"
-        class="size-9 shrink-0"
-        onClick={() => setPianoOpen(true)}
-        aria-label={t('workbench.pianoRollTitle')}
-      >
-        <Icon icon="lucide:audio-waveform" />
-      </Button>
-    </div>
-  );
+  const NarrowPlayerBar = () => {
+    const noNotes = () => score().notes.length === 0;
+    const stepDisabled = () => isPlaying() || noNotes();
+    return (
+      <div class="flex items-center gap-1 border-t bg-background px-2 py-2">
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-8 shrink-0"
+          onClick={seekToPrevNote}
+          disabled={stepDisabled()}
+          aria-label={t('workbench.prevNote')}
+        >
+          <Icon icon="lucide:step-back" />
+        </Button>
+        <Button
+          size="icon"
+          class="size-9 shrink-0"
+          onClick={onPlayPause}
+          disabled={noNotes()}
+          aria-label={isPlaying() ? t('workbench.pause') : t('workbench.play')}
+        >
+          <Icon icon={isPlaying() ? 'lucide:pause' : 'lucide:play'} />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-8 shrink-0"
+          onClick={seekToNextNote}
+          disabled={stepDisabled()}
+          aria-label={t('workbench.nextNote')}
+        >
+          <Icon icon="lucide:step-forward" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          class="size-8 shrink-0"
+          onClick={() => stop()}
+          aria-label={t('workbench.stop')}
+        >
+          <Icon icon="lucide:square" />
+        </Button>
+        <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(currentTimeMs())}</span>
+        <ProgressSlider class="mx-1 min-w-0 flex-1" />
+        <Button
+          variant={pianoOpen() ? 'default' : 'outline'}
+          size="icon"
+          class="size-8 shrink-0"
+          onClick={() => setPianoOpen(true)}
+          aria-label={t('workbench.pianoRollTitle')}
+        >
+          <Icon icon="lucide:audio-waveform" />
+        </Button>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -779,31 +879,20 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </div>
       }
     >
-      {/* ===== 宽屏：可拖动分栏（尺寸持久化）===== */}
+      {/* ===== 宽屏：仅「编辑器 + 钢琴卷帘」两区，可拖动分栏（尺寸持久化）。
+          pianoCenter 关：上下堆叠（编辑器在上、卷帘在下，可完全收起）；
+          pianoCenter 开：左右并排（编辑器 | 卷帘）。===== */}
       <div class="h-[100dvh] w-full overflow-hidden bg-background">
         <Show
           when={pianoCenter()}
           fallback={
-            /* 默认：上区（编辑器 | 操作），下区（钢琴卷帘，可完全收起） */
             <Resizable
               orientation="vertical"
               initialSizes={readSizes('dapume.layout.v', [0.6, 0.4])}
               onSizesChange={(s) => writeSizes('dapume.layout.v', s)}
             >
               <ResizablePanel minSize={0.25} class="overflow-hidden">
-                <Resizable
-                  orientation="horizontal"
-                  initialSizes={readSizes('dapume.layout.h', [0.58, 0.42])}
-                  onSizesChange={(s) => writeSizes('dapume.layout.h', s)}
-                >
-                  <ResizablePanel minSize={0.3} class="overflow-hidden">
-                    <EditorPane />
-                  </ResizablePanel>
-                  <ResizableHandle withHandle />
-                  <ResizablePanel minSize={0.25} class="overflow-hidden">
-                    <ControlsPane />
-                  </ResizablePanel>
-                </Resizable>
+                <EditorPane />
               </ResizablePanel>
               <ResizableHandle withHandle />
               {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
@@ -813,22 +902,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
             </Resizable>
           }
         >
-          {/* 三栏：编辑器 | 钢琴卷帘 | 操作 */}
           <Resizable
             orientation="horizontal"
-            initialSizes={readSizes('dapume.layout.h3', [0.4, 0.34, 0.26])}
-            onSizesChange={(s) => writeSizes('dapume.layout.h3', s)}
+            initialSizes={readSizes('dapume.layout.side', [0.55, 0.45])}
+            onSizesChange={(s) => writeSizes('dapume.layout.side', s)}
           >
-            <ResizablePanel minSize={0.2} class="overflow-hidden">
+            <ResizablePanel minSize={0.25} class="overflow-hidden">
               <EditorPane />
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel minSize={0.2} class="overflow-hidden">
+            <ResizablePanel minSize={0.2} collapsible class="overflow-hidden">
               <PianoRollPane />
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel minSize={0.2} class="overflow-hidden">
-              <ControlsPane />
             </ResizablePanel>
           </Resizable>
         </Show>

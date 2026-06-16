@@ -314,6 +314,38 @@ export function PianoRoll(props: PianoRollProps) {
     draw();
   }
 
+  // 指针拖动平移（触屏/鼠标皆可，沿时间轴）；自动跟随播放时禁用。
+  // canvas 设 touch-action:none，避免浏览器把触摸当作页面滚动而抢走手势。
+  let panning = false;
+  let panLastX = 0;
+  let panLastY = 0;
+  function onPointerDown(e: PointerEvent) {
+    if (props.follow && props.isPlaying) return;
+    panning = true;
+    panLastX = e.clientX;
+    panLastY = e.clientY;
+    canvasEl.setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e: PointerEvent) {
+    if (!panning) return;
+    const vertical = props.orientation === 'vertical';
+    // 沿时间轴的位移：拖动内容跟随手指（向前拖看过去），与滚轮一致取相反号
+    const along = vertical ? e.clientY - panLastY : e.clientX - panLastX;
+    panLastX = e.clientX;
+    panLastY = e.clientY;
+    userScrollX = Math.max(0, userScrollX - along / pxPerMs);
+    draw();
+  }
+  function onPointerUp(e: PointerEvent) {
+    if (!panning) return;
+    panning = false;
+    try {
+      canvasEl.releasePointerCapture(e.pointerId);
+    } catch {
+      /* 忽略 */
+    }
+  }
+
   onMount(() => {
     const ro = new ResizeObserver(() => resize());
     ro.observe(containerEl);
@@ -340,7 +372,15 @@ export function PianoRoll(props: PianoRollProps) {
 
   return (
     <div ref={containerEl} class="relative h-full w-full overflow-hidden">
-      <canvas ref={canvasEl} class="block" onWheel={onWheel} />
+      <canvas
+        ref={canvasEl}
+        class="block touch-none"
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      />
     </div>
   );
 }
