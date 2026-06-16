@@ -190,4 +190,34 @@ export function seek(ms: number): void {
   setCurrentTimeMs(ms);
 }
 
+/**
+ * 输出设备变化时自动暂停（尽力而为）。
+ *
+ * 浏览器没有「耳机断开」的标准事件；可用的最佳信号是 `mediaDevices.devicechange`：
+ * 当音频输出设备数量减少（如蓝牙/有线耳机断开）且正在播放时，自动暂停。
+ * 兼容性：Chromium 桌面端可枚举 audiooutput、较可靠；Safari 不暴露输出设备、Firefox 默认受限，
+ * 在这些环境下能力有限（静默降级、不影响其它功能）。
+ */
+let lastOutputCount = -1;
+async function countAudioOutputs(): Promise<number> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === 'audiooutput').length;
+  } catch {
+    return -1;
+  }
+}
+function initOutputDeviceWatch(): void {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.addEventListener) return;
+  void countAudioOutputs().then((n) => (lastOutputCount = n));
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    void countAudioOutputs().then((n) => {
+      // 输出设备减少且正在播放 → 视为耳机断开，自动暂停
+      if (n >= 0 && lastOutputCount >= 0 && n < lastOutputCount && isPlaying()) pause();
+      if (n >= 0) lastOutputCount = n;
+    });
+  });
+}
+initOutputDeviceWatch();
+
 export { isPlaying, currentTimeMs, pianoState, loadProgress };

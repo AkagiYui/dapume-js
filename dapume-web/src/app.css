@@ -128,6 +128,12 @@ html.editor-page {
   overflow: hidden;
 }
 
+/* 乐谱管理页：用 auto（按需出现滚动条）而非常驻槽位——否则与 Kobalte 弹窗的
+   scroll-lock 补偿叠加会出现「空滚动条 + layout shift」。内容不溢出时不显示滚动条。 */
+html.auto-gutter {
+  scrollbar-gutter: auto;
+}
+
 /* 独立窗口（PWA）：导航条固定在底部，给正文留出底部空间。
    工作台编辑页（editor-page，无 SiteHeader、自管高度）排除在外。 */
 html.standalone:not(.editor-page) body {
@@ -297,4 +303,50 @@ html.standalone:not(.editor-page) body {
   background-color: color-mix(in oklch, var(--primary) 35%, transparent);
   border-radius: 3px;
   box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 50%, transparent);
+}
+
+/* ===== 页面切换的方向感视图过渡（前进左滑、后退右滑；由 SiteHeader 设置 html[data-nav]）。
+   不支持 View Transitions 的浏览器无此动画但功能不受影响。 ===== */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 280ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  html[data-nav='forward']::view-transition-old(root) {
+    animation-name: vt-out-left;
+  }
+  html[data-nav='forward']::view-transition-new(root) {
+    animation-name: vt-in-right;
+  }
+  html[data-nav='back']::view-transition-old(root) {
+    animation-name: vt-out-right;
+  }
+  html[data-nav='back']::view-transition-new(root) {
+    animation-name: vt-in-left;
+  }
+}
+@keyframes vt-out-left {
+  to {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+}
+@keyframes vt-in-right {
+  from {
+    transform: translateX(30%);
+    opacity: 0;
+  }
+}
+@keyframes vt-out-right {
+  to {
+    transform: translateX(30%);
+    opacity: 0;
+  }
+}
+@keyframes vt-in-left {
+  from {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
 }

@@ -3,7 +3,7 @@
  * 列出浏览器中（IndexedDB）的全部乐谱，可新建 / 打开 / 重命名 / 删除。
  * 提供「直接访问时自动打开上次乐谱」开关；点击乐谱进入 /workbench/{id} 编辑。
  */
-import { For, Show, createSignal, onMount } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { useNavigate } from '@tanstack/solid-router';
 import { parse } from 'dapume-js';
 import { SiteHeader } from '~/components/SiteHeader';
@@ -11,6 +11,7 @@ import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
 import { Switch, SwitchControl, SwitchLabel, SwitchThumb } from '~/components/ui/switch';
 import { Dialog, DialogContent, DialogTitle } from '~/components/ui/dialog';
+import { ImportDialog, ShareDialog } from '~/components/QrDialogs';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
 import {
@@ -63,6 +64,10 @@ export default function ScoreManager() {
   const navigate = useNavigate();
   const [ready, setReady] = createSignal(false);
 
+  // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift
+  document.documentElement.classList.add('auto-gutter');
+  onCleanup(() => document.documentElement.classList.remove('auto-gutter'));
+
   onMount(async () => {
     await ensureSeeded(t('manager.untitled'));
     // 仅在「直接访问 /workbench、本次加载首次进入」且开关开启时，自动打开上次乐谱
@@ -112,6 +117,15 @@ export default function ScoreManager() {
     setDeleteTarget(null);
   }
 
+  // 分享 / 导入（二维码）
+  const [shareTarget, setShareTarget] = createSignal<ScoreDoc | null>(null);
+  const [importOpen, setImportOpen] = createSignal(false);
+  async function onImported(title: string, content: string) {
+    setImportOpen(false);
+    const doc = await createScore(title.trim() || t('manager.untitled'), content);
+    navigate({ to: '/workbench/$id', params: { id: doc.id } });
+  }
+
   return (
     <div class="min-h-full">
       <SiteHeader />
@@ -122,10 +136,16 @@ export default function ScoreManager() {
             <h1 class="text-3xl font-extrabold tracking-tight">{t('manager.title')}</h1>
             <p class="mt-2 text-muted-foreground">{t('manager.subtitle')}</p>
           </div>
-          <Button class="shrink-0 gap-1.5" onClick={onNew}>
-            <Icon icon="lucide:plus" />
-            {t('manager.new')}
-          </Button>
+          <div class="flex shrink-0 items-center gap-2">
+            <Button variant="outline" class="gap-1.5" onClick={() => setImportOpen(true)}>
+              <Icon icon="lucide:qr-code" />
+              {t('manager.import')}
+            </Button>
+            <Button class="gap-1.5" onClick={onNew}>
+              <Icon icon="lucide:plus" />
+              {t('manager.new')}
+            </Button>
+          </div>
         </div>
 
         {/* 自动打开开关 */}
@@ -159,11 +179,8 @@ export default function ScoreManager() {
                   const s = statsOf(doc.content);
                   return (
                     <div class="group flex flex-col rounded-lg border bg-card p-4 transition-colors hover:border-primary/50">
-                      <button
-                        type="button"
-                        class="min-w-0 text-left"
-                        onClick={() => navigate({ to: '/workbench/$id', params: { id: doc.id } })}
-                      >
+                      {/* 卡片本身不再点击进入编辑（仅「打开」按钮进入），避免误触 */}
+                      <div class="min-w-0">
                         <div class="flex items-center gap-1.5">
                           <Icon icon="lucide:file-music" class="shrink-0 text-primary" />
                           <span class="truncate font-medium">{doc.title}</span>
@@ -172,7 +189,7 @@ export default function ScoreManager() {
                           {s.notes} {t('manager.notes')} · {fmt(s.dur)} · {t('manager.updated')}{' '}
                           {formatDate(doc.updatedAt, locale())}
                         </div>
-                      </button>
+                      </div>
                       <div class="mt-3 flex items-center gap-1">
                         <Button
                           size="sm"
@@ -182,6 +199,16 @@ export default function ScoreManager() {
                         >
                           <Icon icon="lucide:square-pen" />
                           {t('manager.open')}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          class="size-8"
+                          aria-label={t('manager.share')}
+                          title={t('manager.share')}
+                          onClick={() => setShareTarget(doc)}
+                        >
+                          <Icon icon="lucide:share-2" />
                         </Button>
                         <Button
                           size="icon"
@@ -278,6 +305,19 @@ export default function ScoreManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 二维码分享 / 导入 */}
+      <ShareDialog
+        open={shareTarget() !== null}
+        title={shareTarget()?.title ?? ''}
+        content={shareTarget()?.content ?? ''}
+        onClose={() => setShareTarget(null)}
+      />
+      <ImportDialog
+        open={importOpen()}
+        onClose={() => setImportOpen(false)}
+        onImported={(title, content) => void onImported(title, content)}
+      />
     </div>
   );
 }

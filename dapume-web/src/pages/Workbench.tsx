@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } 
 import { InfoTip } from '~/components/ui/tooltip';
 
 import { EXAMPLES } from '~/data/examples';
-import { saveScoreContent, setLastScoreId } from '~/stores/scores';
+import { renameScore, saveScoreContent, setLastScoreId } from '~/stores/scores';
 import type { ScoreDoc } from '~/stores/scores';
 import { downloadBytes, downloadText } from '~/lib/download';
 import { t } from '~/i18n';
@@ -155,16 +155,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 钢琴卷帘：音高方向（默认从高到低）与朝向（默认横向）
   const [pianoAsc, setPianoAsc] = createSignal(lsGet('dapume.pianoAsc', 'false') === 'true');
   createEffect(() => lsSet('dapume.pianoAsc', String(pianoAsc())));
-  const [pianoVertical, setPianoVertical] = createSignal(lsGet('dapume.pianoVertical', 'false') === 'true');
+  // 默认纵向（Synthesia 风格、键盘在底）
+  const [pianoVertical, setPianoVertical] = createSignal(lsGet('dapume.pianoVertical', 'true') === 'true');
   createEffect(() => lsSet('dapume.pianoVertical', String(pianoVertical())));
   // 键盘位置：OFF=横向在左/纵向在底；ON=横向在右/纵向在顶
   const [pianoKbFlip, setPianoKbFlip] = createSignal(lsGet('dapume.pianoKbFlip', 'false') === 'true');
   createEffect(() => lsSet('dapume.pianoKbFlip', String(pianoKbFlip())));
-  // 判定线位置：OFF=悬在音符区 40% 处；ON=固定在琴键与音符区交接处
-  const [pianoJudgeKb, setPianoJudgeKb] = createSignal(lsGet('dapume.pianoJudgeKb', 'false') === 'true');
+  // 判定线位置：OFF=悬在音符区 40% 处；ON=固定在琴键与音符区交接处（默认贴键盘）
+  const [pianoJudgeKb, setPianoJudgeKb] = createSignal(lsGet('dapume.pianoJudgeKb', 'true') === 'true');
   createEffect(() => lsSet('dapume.pianoJudgeKb', String(pianoJudgeKb())));
-  // 钢琴卷帘居中（宽屏左中右三栏布局）：OFF=卷帘在底部；ON=编辑器|卷帘|操作 三栏
-  const [pianoCenter, setPianoCenter] = createSignal(lsGet('dapume.pianoCenter', 'false') === 'true');
+  // 编辑器与卷帘并排（宽屏左右布局）：OFF=卷帘在底部；ON=编辑器 | 卷帘（默认并排）
+  const [pianoCenter, setPianoCenter] = createSignal(lsGet('dapume.pianoCenter', 'true') === 'true');
   createEffect(() => lsSet('dapume.pianoCenter', String(pianoCenter())));
 
   // 视觉延迟（毫秒）：把卷帘与高亮整体延后，以适配无线耳机的音频延迟
@@ -186,6 +187,23 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [helpOpen, setHelpOpen] = createSignal(false);
   // 待确认载入的乐谱内容（示例/清空会覆盖当前内容，先二次确认）
   const [pendingLoad, setPendingLoad] = createSignal<string | null>(null);
+
+  // 乐谱标题（可在本页重命名，用本地信号即时反映改名）
+  const [docTitle, setDocTitle] = createSignal(props.doc.title);
+  const [renaming, setRenaming] = createSignal(false);
+  const [renameValue, setRenameValue] = createSignal('');
+  function openRename() {
+    setRenameValue(docTitle());
+    setRenaming(true);
+  }
+  async function confirmRename() {
+    const name = renameValue().trim();
+    if (name) {
+      await renameScore(props.doc.id, name);
+      setDocTitle(name);
+    }
+    setRenaming(false);
+  }
 
   // ===== 解析与播放 =====
   const score = createMemo<DapumeScore>(() => {
@@ -276,7 +294,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   // 以乐谱标题作为下载文件名（过滤掉文件名非法字符）
   const fileName = (ext: string) =>
-    `${(props.doc.title || 'score').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'score'}.${ext}`;
+    `${(docTitle() || 'score').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'score'}.${ext}`;
   function onDownloadMidi() {
     downloadBytes(toMidi(score()), fileName('mid'), 'audio/midi');
   }
@@ -320,14 +338,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           <span>{liveParams().bpm}bpm</span>
         </span>
       </Show>
-      {/* 用组件库 tooltip 取代原生 title：桌面 hover、移动端点击均可弹出说明 */}
+      {/* 用组件库 tooltip 取代原生 title：桌面 hover、移动端点击均可弹出说明。仅显示音符数（音轨数已去掉）。 */}
       <InfoTip label={t('workbench.notes')} class="shrink-0 gap-1 tabular-nums">
         <Icon icon="lucide:music" />
         {score().notes.length}
-      </InfoTip>
-      <InfoTip label={t('workbench.tracks')} class="shrink-0 gap-1 tabular-nums">
-        <Icon icon="lucide:layers" />
-        {score().trackCount}
       </InfoTip>
     </div>
   );
@@ -614,7 +628,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         class="size-8"
         aria-label={t('workbench.download')}
       >
-        <Icon icon="lucide:download" />
+        <Icon icon="lucide:file-output" />
       </DialogTrigger>
       <DialogContent>
         <DialogTitle class="mb-4">{t('workbench.download')}</DialogTitle>
@@ -727,8 +741,26 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   );
 
   // ===== 宽屏分区 =====
+  // 乐谱标题 + 重命名按钮：宽屏平时隐藏、hover 标题时显示；窄屏（无 hover）常显。标题溢出省略。
+  const TitleWithRename = (p: { class?: string }) => (
+    <div class={`group/title flex min-w-0 items-center gap-0.5 ${p.class ?? ''}`}>
+      <span class="min-w-0 truncate text-sm font-medium" title={docTitle()}>
+        {docTitle()}
+      </span>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="size-6 shrink-0 text-muted-foreground opacity-100 transition-opacity hover:text-foreground md:opacity-0 md:group-hover/title:opacity-100"
+        aria-label={t('manager.rename')}
+        onClick={openRename}
+      >
+        <Icon icon="lucide:pencil" class="size-3.5" />
+      </Button>
+    </div>
+  );
+
   // 操作区已整体移除。顶栏抽到「整页级」（占满页面宽度、在分栏之上）：
-  // 左=返回(图标)+标题，中=播放控制，右=乐谱信息+模态框按钮。
+  // 左=返回(图标)+标题(可重命名)，中=播放控制，右=乐谱信息+模态框按钮。
   const WorkbenchTopBar = () => (
     <div class="flex items-center gap-2 border-b px-2 py-1.5">
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
@@ -741,9 +773,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         >
           <Icon icon="lucide:arrow-left" />
         </Button>
-        <span class="min-w-0 truncate text-sm font-medium" title={props.doc.title}>
-          {props.doc.title}
-        </span>
+        <TitleWithRename class="min-w-0" />
       </div>
       <CompactPlayback />
       <div class="flex min-w-0 flex-1 items-center justify-end gap-2">
@@ -845,7 +875,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       fallback={
         /* ===== 窄屏：编辑器为主 + 底部播放条 + 钢琴卷帘抽屉 ===== */
         <div class="flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
-          {/* 顶栏：返回(图标) + 乐谱信息(靠右、可截断) + 速查/设置/下载。
+          {/* 顶栏：返回(图标) + 乐谱标题(可重命名、溢出省略) + 乐谱信息 + 速查/设置/下载。
               所有可变内容 min-w-0/可截断，确保播放时也不撑破顶栏。 */}
           <div class="flex items-center gap-1 border-b px-2 py-1.5">
             <Button
@@ -857,9 +887,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
             >
               <Icon icon="lucide:arrow-left" />
             </Button>
-            <div class="min-w-0 flex-1 overflow-hidden">
-              <ScoreStats class="justify-end" />
-            </div>
+            <TitleWithRename class="min-w-0 flex-1" />
+            <ScoreStats class="shrink-0" />
             <div class="flex shrink-0 items-center gap-0.5">
               <HelpModalButton />
               <SettingsModalButton extra={<WorkbenchSettings />} />
@@ -938,6 +967,33 @@ export default function Workbench(props: { doc: ScoreDoc }) {
             {t('manager.cancel')}
           </Button>
           <Button onClick={confirmLoad}>{t('common.confirm')}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    {/* 重命名乐谱 */}
+    <Dialog open={renaming()} onOpenChange={(o) => !o && setRenaming(false)}>
+      <DialogContent>
+        <DialogTitle class="mb-3">{t('manager.renameTitle')}</DialogTitle>
+        <label class="mb-1.5 block text-sm text-muted-foreground">{t('manager.renamePrompt')}</label>
+        <input
+          class="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          value={renameValue()}
+          onInput={(e) => setRenameValue(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void confirmRename();
+            }
+          }}
+          autofocus
+        />
+        <div class="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setRenaming(false)}>
+            {t('manager.cancel')}
+          </Button>
+          <Button onClick={() => void confirmRename()} disabled={!renameValue().trim()}>
+            {t('manager.save')}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

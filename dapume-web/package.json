@@ -25,12 +25,15 @@
     "dapume-js": "workspace:*",
     "highlight.js": "^11.11.0",
     "idb-keyval": "^6.2.1",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
     "smplr": "^1.0.0",
     "solid-js": "^1.9.13",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.112",
+    "@types/qrcode": "^1.5.5",
     "@kobalte/tailwindcss": "^0.9.0",
     "@tailwindcss/vite": "^4.1.4",
     "@tanstack/router-plugin": "^1.168.0",
