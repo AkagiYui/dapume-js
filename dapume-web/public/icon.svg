@@ -1,0 +1,14 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="dapume">
+  <rect width="512" height="512" fill="#6366f1"/>
+  <g transform="translate(106 170)">
+    <rect width="300" height="172" rx="14" fill="#f8fafc"/>
+    <g stroke="#cbd5e1" stroke-width="3" stroke-linecap="round">
+      <path d="M60 8V164M120 8V164M180 8V164M240 8V164"/>
+    </g>
+    <g fill="#312e81">
+      <rect x="42" y="0" width="36" height="104" rx="6"/>
+      <rect x="102" y="0" width="36" height="104" rx="6"/>
+      <rect x="222" y="0" width="36" height="104" rx="6"/>
+    </g>
+  </g>
+</svg>

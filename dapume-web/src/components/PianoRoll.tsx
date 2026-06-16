@@ -93,6 +93,7 @@ export function PianoRoll(props: PianoRollProps) {
     const border = cssVar('--border') || '#ddd';
     const mutedFg = cssVar('--muted-foreground') || '#999';
     const primary = cssVar('--primary') || '#3b82f6';
+    const primaryFg = cssVar('--primary-foreground') || '#fff';
     const fg = cssVar('--foreground') || '#111';
 
     ctx.clearRect(0, 0, cssW, cssH);
@@ -207,25 +208,43 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
+    // 当前发声的音高（用于「按下」反色）
+    const activePitches = new Set<number>();
+    for (const n of props.notes) {
+      if (n.startTime <= props.currentTimeMs && props.currentTimeMs < n.startTime + n.duration) {
+        activePitches.add(Math.max(0, Math.min(127, n.pitch)));
+      }
+    }
+
     // 键盘：先以 bg 覆盖键盘区（时间轴上 KEYBOARD_W 宽、全音高轴）
     ctx.fillStyle = bg;
     fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
-    // 黑键仅占 2/3 长度，且贴在远离音符区的一侧（像真实钢琴俯视图）
-    const blackKeyLen = (keyBodyLen * 2) / 3;
+    // 像真实钢琴：黑键长度（沿时间）为白键一半、贴远离音符区的一侧，且音高方向更窄
+    // （故音符连接处各键同宽，远端白键比黑键宽）。
+    const blackKeyLen = keyBodyLen / 2;
     const blackKeyStart = kbAtStart ? keyBodyStart : keyBodyStart + keyBodyLen - blackKeyLen;
+    const blackInset = cell * 0.16; // 黑键音高方向两侧各内缩，使其更窄
+    const darkKey = `color-mix(in oklch, ${fg} 82%, ${bg})`;
+    const lightBorder = `color-mix(in oklch, ${border} 60%, transparent)`;
     for (let p = lo; p <= hi; p++) {
       const p0 = pPos(p);
-      // 白键边界
-      ctx.strokeStyle = `color-mix(in oklch, ${border} 60%, transparent)`;
+      const isBlack = BLACK_KEYS.has(((p % 12) + 12) % 12);
+      const pressed = activePitches.has(p);
+      // 白键整格 + 边界（按下则用主色反白）
+      if (!isBlack && pressed) {
+        ctx.fillStyle = primary;
+        fillRect(keyBodyStart, keyBodyLen, p0, cell);
+      }
+      ctx.strokeStyle = lightBorder;
       strokeRect(keyBodyStart + 0.5, keyBodyLen, p0 + 0.5, cell);
-      // 黑键：只占 2/3 长，叠在外侧
-      if (BLACK_KEYS.has(((p % 12) + 12) % 12)) {
-        ctx.fillStyle = `color-mix(in oklch, ${fg} 82%, ${bg})`;
-        fillRect(blackKeyStart, blackKeyLen, p0, cell);
+      // 黑键：半长 + 更窄，贴外侧（按下则用主色）
+      if (isBlack) {
+        ctx.fillStyle = pressed ? primary : darkKey;
+        fillRect(blackKeyStart, blackKeyLen, p0 + blackInset, cell - 2 * blackInset);
       }
       // 每个 C 标注音名（C 是白键，整条都可写）
       if (((p % 12) + 12) % 12 === 0) {
-        ctx.fillStyle = mutedFg;
+        ctx.fillStyle = pressed ? primaryFg : mutedFg;
         ctx.font = '9px ui-sans-serif, system-ui';
         const label = `C${Math.floor(p / 12) - 1}`;
         if (vertical) ctx.fillText(label, p0 + 1, keyBodyStart + keyBodyLen - 2);

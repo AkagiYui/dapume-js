@@ -159,6 +159,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [pianoKbFlip, setPianoKbFlip] = createSignal(lsGet('dapume.pianoKbFlip', 'false') === 'true');
   createEffect(() => lsSet('dapume.pianoKbFlip', String(pianoKbFlip())));
 
+  // 视觉延迟（毫秒）：把卷帘与高亮整体延后，以适配无线耳机的音频延迟
+  const [delayMs, setDelayMs] = createSignal(
+    Math.max(0, Math.min(500, parseInt(lsGet('dapume.visualDelay', '0'), 10) || 0)),
+  );
+  createEffect(() => lsSet('dapume.visualDelay', String(delayMs())));
+
   // ===== 窄屏适配 =====
   const narrowMedia = window.matchMedia('(max-width: 768px)');
   const [isNarrow, setIsNarrow] = createSignal(narrowMedia.matches);
@@ -194,14 +200,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 「播放态」：正在播放，或已暂停（currentTimeMs > 0）。暂停时仍保留高亮与实时调号/速度。
   const playActive = createMemo(() => isPlaying() || currentTimeMs() > 0);
 
-  // 播放/暂停时高亮当前发声音符对应的源字符
+  // 视觉时间 = 播放时间 - 延迟：卷帘与高亮整体延后，与无线耳机听到的声音对齐
+  const visualTimeMs = createMemo(() => Math.max(0, currentTimeMs() - delayMs()));
+
+  // 播放/暂停时高亮当前发声音符对应的源字符（用视觉时间）
   const highlights = createMemo(() => {
     if (!playActive()) return [];
-    return activeNotesAt(score(), currentTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
+    return activeNotesAt(score(), visualTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
   });
 
-  // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示）
-  const liveParams = createMemo(() => paramsAt(score(), currentTimeMs()));
+  // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示，用视觉时间）
+  const liveParams = createMemo(() => paramsAt(score(), visualTimeMs()));
 
   function onPlayPause() {
     if (isPlaying()) {
@@ -340,6 +349,28 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const SecondaryControls = () => (
     <div class="space-y-5 p-4">
       <ToggleSwitches />
+      {/* 视觉延迟：把卷帘/高亮整体延后，以适配无线耳机的音频延迟 */}
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm">
+          <span class="flex items-center gap-1.5">
+            <Icon icon="lucide:headphones" />
+            {t('workbench.visualDelay')}
+          </span>
+          <span class="tabular-nums text-muted-foreground">{delayMs()}ms</span>
+        </div>
+        <Slider
+          minValue={0}
+          maxValue={500}
+          step={10}
+          value={[delayMs()]}
+          onChange={(v) => setDelayMs(v[0]!)}
+        >
+          <SliderTrack>
+            <SliderFill />
+            <SliderThumb />
+          </SliderTrack>
+        </Slider>
+      </div>
       <Separator />
       {/* 导出 */}
       <div class="grid grid-cols-2 gap-2">
@@ -410,7 +441,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       <PianoRoll
         notes={score().notes}
         durationMs={score().durationMs}
-        currentTimeMs={currentTimeMs()}
+        currentTimeMs={visualTimeMs()}
         isPlaying={isPlaying()}
         follow={follow()}
         pitchAscending={pianoAsc()}
@@ -426,8 +457,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     onChange: (v: boolean) => void;
     icon: string;
     label: string;
-    /** 为 true 时把图标旋转 90°（带过渡动画）。 */
+    /** 为 true 时把图标顺时针旋转 90°（带过渡动画）。 */
     rotate?: boolean;
+    /** 为 true 时把图标逆时针旋转 90°（带过渡动画）。 */
+    rotateCcw?: boolean;
   }) => (
     <Switch
       checked={p.checked}
@@ -439,7 +472,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       <SwitchLabel class="flex text-muted-foreground">
         <Icon
           icon={p.icon}
-          class={`inline-block transition-transform duration-300 ${p.rotate ? 'rotate-90' : ''}`}
+          class={`inline-block transition-transform duration-300 ${p.rotate ? 'rotate-90' : ''} ${p.rotateCcw ? '-rotate-90' : ''}`}
         />
       </SwitchLabel>
       <SwitchControl class="h-4 w-7">
@@ -463,6 +496,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           checked={pianoVertical()}
           onChange={setPianoVertical}
           icon="lucide:rotate-3d"
+          rotateCcw={!pianoVertical()}
           label={t('workbench.pianoOrientation')}
         />
         <MiniSwitch
@@ -622,6 +656,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
             onClose={() => setPianoOpen(false)}
             title={t('workbench.pianoRollTitle')}
             headerRight={<PianoRollInfo />}
+            hideClose
             class="h-[70dvh]"
           >
             <PianoRollBody />

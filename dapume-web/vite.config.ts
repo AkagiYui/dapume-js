@@ -4,6 +4,7 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import solid from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/vite';
 import iconifyOffline, { SKIP_PREFIXES } from 'vite-plugin-iconify-offline';
+import { VitePWA } from 'vite-plugin-pwa';
 
 // 避免把开发者文档示例代码中的 `node:fs` 等字符串误判为图标引用
 SKIP_PREFIXES.add('node');
@@ -60,6 +61,7 @@ function devApi(): Plugin {
  * - `base: '/'`：history 路由部署在站点根目录；配合 public/_redirects 实现 SPA 回退。
  * - 构建产物为纯静态文件，输出至 `dist/`。
  * - iconifyOffline：将用到的 Iconify 图标离线化，运行时不再请求网络。
+ * - VitePWA：生成 Web App Manifest 与 Service Worker，支持安装与离线访问。
  */
 export default defineConfig({
   base: '/',
@@ -69,6 +71,37 @@ export default defineConfig({
     solid(),
     tailwindcss(),
     iconifyOffline(),
+    VitePWA({
+      // 部署后自动更新 Service Worker（无需用户手动刷新即可拿到新版本）
+      registerType: 'autoUpdate',
+      manifest: {
+        name: '打谱么 · dapume',
+        short_name: '打谱么',
+        description: '线性乐谱（dapume）在线编辑与播放工具',
+        lang: 'zh-CN',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#ffffff',
+        theme_color: '#6366f1',
+        icons: [
+          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // 预缓存哈希命名的构建产物；prerender.mjs 会在构建后改写 index.html，
+        // SW 在 install 阶段以网络拉取实际（已预渲染）的 HTML，故缓存内容正确。
+        globPatterns: ['**/*.{js,css,html,svg,woff,woff2,ttf}'],
+        // SPA 回退：未预缓存的路由（如 /developers）离线时回退到应用外壳
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//, /^\/_/],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+      },
+      // 开发期不注册 SW，避免干扰 HMR 与 /api 中间件
+      devOptions: { enabled: false },
+    }),
   ],
   resolve: {
     alias: {
