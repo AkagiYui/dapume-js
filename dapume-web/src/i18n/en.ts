@@ -72,6 +72,7 @@ export const en: typeof zh = {
     play: 'Play',
     stop: 'Stop',
     loading: 'Loading…',
+    confirm: 'Confirm',
   },
   guide: {
     heroTitle: 'Dapume · Linear Score',
@@ -135,5 +136,8 @@ export const en: typeof zh = {
     duration: 'Duration',
     playingLocked: 'Playing — editing is locked',
     quickRef: 'Quick reference',
+    help: 'Reference & examples',
+    download: 'Download',
+    confirmOverwrite: 'Loading will overwrite the current score. Continue?',
   },
 };

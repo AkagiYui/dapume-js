@@ -133,7 +133,10 @@ export function PianoRoll(props: PianoRollProps) {
     if (autoFollow) {
       // 判定线固定在交接处时锚点为 0（当前时刻落在 naLo）；否则悬在音符区 40% 处
       const anchor = props.judgeAtKeyboard ? 0 : visibleMs * 0.4;
-      scrollX = clamp(props.currentTimeMs - anchor, 0, maxScroll);
+      // 判定线贴键盘时不夹到 maxScroll：让判定线始终停在交接处，
+      // 末尾继续滚动使最后的音符一路流向键盘（而非判定线离开键盘走到瀑布末端）。
+      const maxS = props.judgeAtKeyboard ? Infinity : maxScroll;
+      scrollX = clamp(props.currentTimeMs - anchor, 0, maxS);
       userScrollX = scrollX;
     } else {
       scrollX = clamp(userScrollX, 0, maxScroll);

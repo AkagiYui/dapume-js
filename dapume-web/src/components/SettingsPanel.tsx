@@ -1,8 +1,9 @@
 /**
  * 设置面板：深浅色、主题色、语言。供指南页头部弹出层与工作台控制区共用。
  */
-import { For, type JSX } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 import { Button } from '~/components/ui/button';
+import { Separator } from '~/components/ui/separator';
 import { Icon } from '~/components/Icon';
 import { t } from '~/i18n';
 import {
@@ -134,8 +135,8 @@ export function SettingsButton() {
   );
 }
 
-/** 工作台用的设置按钮（模态框 SettingsPanel）。仅图标。 */
-export function SettingsModalButton() {
+/** 工作台用的设置按钮（模态框 SettingsPanel）。仅图标。extra 为外观设置之后的附加内容（如工作台开关）。 */
+export function SettingsModalButton(props: { extra?: JSX.Element }) {
   // 记录打开前的触发元素，用于关闭后还原焦点
   let trigger: HTMLElement | null = null;
   return (
@@ -167,7 +168,13 @@ export function SettingsModalButton() {
         }}
       >
         <DialogTitle class="mb-4">{t('settings.title')}</DialogTitle>
-        <SettingsPanel />
+        <div class="max-h-[70dvh] overflow-y-auto">
+          <SettingsPanel />
+          <Show when={props.extra}>
+            <Separator class="my-4" />
+            {props.extra}
+          </Show>
+        </div>
       </DialogContent>
     </Dialog>
   );

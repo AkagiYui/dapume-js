@@ -25,6 +25,7 @@ import { Switch, SwitchControl, SwitchLabel, SwitchThumb } from '~/components/ui
 import { Slider, SliderFill, SliderThumb, SliderTrack } from '~/components/ui/slider';
 import { Resizable, ResizableHandle, ResizablePanel } from '~/components/ui/resizable';
 import { BottomDrawer } from '~/components/ui/drawer';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
 
 import { EXAMPLES } from '~/data/examples';
 import { saveScoreContent, setLastScoreId } from '~/stores/scores';
@@ -178,9 +179,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   narrowMedia.addEventListener('change', onNarrow);
   onCleanup(() => narrowMedia.removeEventListener('change', onNarrow));
 
-  // 窄屏抽屉开关（钢琴卷帘 / 更多操作）
+  // 窄屏钢琴卷帘抽屉开关
   const [pianoOpen, setPianoOpen] = createSignal(false);
-  const [moreOpen, setMoreOpen] = createSignal(false);
+  // 速查与示例模态框（受控，便于载入示例后关闭）
+  const [helpOpen, setHelpOpen] = createSignal(false);
+  // 待确认载入的乐谱内容（示例/清空会覆盖当前内容，先二次确认）
+  const [pendingLoad, setPendingLoad] = createSignal<string | null>(null);
 
   // ===== 解析与播放 =====
   const score = createMemo<DapumeScore>(() => {
@@ -227,6 +231,28 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     }
   }
 
+  // 空格键播放/暂停：在编辑器、输入框、按钮、开关、滑块等可聚焦控件上不拦截（让其原生行为生效）
+  const onSpace = (e: KeyboardEvent) => {
+    if (e.code !== 'Space') return;
+    const el = document.activeElement as HTMLElement | null;
+    const tag = el?.tagName;
+    if (
+      el &&
+      (el.isContentEditable ||
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'BUTTON' ||
+        el.getAttribute('role') === 'switch' ||
+        el.getAttribute('role') === 'slider')
+    )
+      return;
+    if (score().notes.length === 0) return;
+    e.preventDefault();
+    onPlayPause();
+  };
+  window.addEventListener('keydown', onSpace);
+  onCleanup(() => window.removeEventListener('keydown', onSpace));
+
   // 以乐谱标题作为下载文件名（过滤掉文件名非法字符）
   const fileName = (ext: string) =>
     `${(props.doc.title || 'score').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'score'}.${ext}`;
@@ -237,33 +263,49 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     downloadText(scoreText(), fileName('dapume'), 'text/plain');
   }
 
+  // 载入示例 / 清空：若当前已有内容且与目标不同，先二次确认（会覆盖当前内容）
+  function requestLoad(content: string) {
+    if (scoreText().trim() && scoreText() !== content) {
+      setPendingLoad(content);
+    } else {
+      setScoreText(content);
+      setHelpOpen(false);
+    }
+  }
+  function confirmLoad() {
+    const c = pendingLoad();
+    if (c !== null) setScoreText(c);
+    setPendingLoad(null);
+    setHelpOpen(false);
+  }
+
   // ===== 可复用片段 =====
 
-  /** 乐谱信息：实时调号/速度（播放/暂停时）+ 音符数 / 音轨数 / 时长。 */
-  const ScoreStats = () => (
-    <div class="flex items-center gap-3 text-xs text-muted-foreground">
+  /** 乐谱信息：实时调号/速度（播放/暂停时）+ 音符数 / 音轨数。时长不在此显示（播放控制里已有）。
+   * 窄屏空间紧张时，实时调号/速度可被截断，音符/音轨数始终可见（靠右、不撑破顶栏）。 */
+  const ScoreStats = (p: { class?: string }) => (
+    <div class={`flex items-center gap-2 text-xs text-muted-foreground ${p.class ?? ''}`}>
       <Show when={isPlaying()}>
-        <Icon icon="lucide:lock" class="text-amber-500" title={t('workbench.playingLocked')} />
+        <Icon icon="lucide:lock" class="shrink-0 text-amber-500" title={t('workbench.playingLocked')} />
       </Show>
       {/* 播放/暂停时，在音符数左侧实时显示当前 1=调号 与 bpm */}
       <Show when={playActive()}>
-        <span class="flex items-center gap-1.5 font-medium text-foreground tabular-nums" title="1= / bpm">
+        <span
+          class="flex min-w-0 shrink items-center gap-1.5 truncate font-medium text-foreground tabular-nums"
+          title="1= / bpm"
+        >
           <span>1={liveParams().key}</span>
           <span class="opacity-60">·</span>
           <span>{liveParams().bpm}bpm</span>
         </span>
       </Show>
-      <span class="flex items-center gap-1 tabular-nums" title={t('workbench.notes')}>
+      <span class="flex shrink-0 items-center gap-1 tabular-nums" title={t('workbench.notes')}>
         <Icon icon="lucide:music" />
         {score().notes.length}
       </span>
-      <span class="flex items-center gap-1 tabular-nums" title={t('workbench.tracks')}>
+      <span class="flex shrink-0 items-center gap-1 tabular-nums" title={t('workbench.tracks')}>
         <Icon icon="lucide:layers" />
         {score().trackCount}
-      </span>
-      <span class="flex items-center gap-1 tabular-nums" title={t('workbench.duration')}>
-        <Icon icon="lucide:clock" />
-        {fmt(score().durationMs)}
       </span>
     </div>
   );
@@ -367,50 +409,55 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
-  /** 次要操作：开关 + 导出 + 示例 + 速查（播放控制以外的内容）。 */
-  const SecondaryControls = () => (
-    <div class="space-y-5 p-4">
+  /** 视觉延迟滑块：把卷帘/高亮整体延后，以适配无线耳机的音频延迟。 */
+  const DelaySlider = () => (
+    <div class="space-y-2">
+      <div class="flex items-center justify-between text-sm">
+        <span class="flex items-center gap-1.5">
+          <Icon icon="lucide:headphones" />
+          {t('workbench.visualDelay')}
+        </span>
+        <span class="tabular-nums text-muted-foreground">{delayMs()}ms</span>
+      </div>
+      <Slider minValue={0} maxValue={500} step={10} value={[delayMs()]} onChange={(v) => setDelayMs(v[0]!)}>
+        <SliderTrack>
+          <SliderFill />
+          <SliderThumb />
+        </SliderTrack>
+      </Slider>
+    </div>
+  );
+
+  /** 工作台开关与延迟（移入设置模态框，作为外观设置之后的附加内容）。 */
+  const WorkbenchSettings = () => (
+    <div class="space-y-4">
       <ToggleSwitches />
-      {/* 视觉延迟：把卷帘/高亮整体延后，以适配无线耳机的音频延迟 */}
-      <div class="space-y-2">
-        <div class="flex items-center justify-between text-sm">
-          <span class="flex items-center gap-1.5">
-            <Icon icon="lucide:headphones" />
-            {t('workbench.visualDelay')}
-          </span>
-          <span class="tabular-nums text-muted-foreground">{delayMs()}ms</span>
-        </div>
-        <Slider
-          minValue={0}
-          maxValue={500}
-          step={10}
-          value={[delayMs()]}
-          onChange={(v) => setDelayMs(v[0]!)}
-        >
-          <SliderTrack>
-            <SliderFill />
-            <SliderThumb />
-          </SliderTrack>
-        </Slider>
-      </div>
-      <Separator />
-      {/* 导出 */}
-      <div class="grid grid-cols-2 gap-2">
-        <Button
-          variant="outline"
-          class="gap-1.5"
-          onClick={onDownloadMidi}
-          disabled={score().notes.length === 0}
-        >
-          <Icon icon="lucide:file-music" />
-          {t('workbench.downloadMidi')}
-        </Button>
-        <Button variant="outline" class="gap-1.5" onClick={onDownloadDpm}>
-          <Icon icon="lucide:file-down" />
-          {t('workbench.downloadDpm')}
-        </Button>
-      </div>
-      <Separator />
+      <DelaySlider />
+    </div>
+  );
+
+  /** 导出按钮（下载 MIDI / dapume）。 */
+  const DownloadButtons = () => (
+    <div class="grid grid-cols-2 gap-2">
+      <Button
+        variant="outline"
+        class="gap-1.5"
+        onClick={onDownloadMidi}
+        disabled={score().notes.length === 0}
+      >
+        <Icon icon="lucide:file-music" />
+        {t('workbench.downloadMidi')}
+      </Button>
+      <Button variant="outline" class="gap-1.5" onClick={onDownloadDpm}>
+        <Icon icon="lucide:file-down" />
+        {t('workbench.downloadDpm')}
+      </Button>
+    </div>
+  );
+
+  /** 速查 + 示例（移入「速查与示例」模态框）。 */
+  const HelpContent = () => (
+    <div class="space-y-5">
       {/* 语法速查 */}
       <div class="space-y-2">
         <div class="text-xs font-medium text-muted-foreground">{t('workbench.quickRef')}</div>
@@ -426,7 +473,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </div>
       </div>
       <Separator />
-      {/* 示例（放在速查之后） */}
+      {/* 示例（点击会覆盖当前内容，先二次确认） */}
       <div class="space-y-2">
         <div class="text-xs font-medium text-muted-foreground">{t('workbench.examples')}</div>
         <div class="flex flex-wrap gap-1.5">
@@ -436,18 +483,58 @@ export default function Workbench(props: { doc: ScoreDoc }) {
                 variant="secondary"
                 size="sm"
                 disabled={isPlaying()}
-                onClick={() => setScoreText(ex.code)}
+                onClick={() => requestLoad(ex.code)}
               >
                 {ex.title[locale()]}
               </Button>
             )}
           </For>
-          <Button variant="ghost" size="sm" disabled={isPlaying()} onClick={() => setScoreText('')}>
+          <Button variant="ghost" size="sm" disabled={isPlaying()} onClick={() => requestLoad('')}>
             {t('workbench.clear')}
           </Button>
         </div>
       </div>
     </div>
+  );
+
+  /** 速查与示例模态框按钮（问号图标，受控以便载入示例后关闭）。 */
+  const HelpModalButton = () => (
+    <Dialog open={helpOpen()} onOpenChange={setHelpOpen}>
+      <DialogTrigger
+        as={Button}
+        variant="ghost"
+        size="icon"
+        class="size-8"
+        aria-label={t('workbench.help')}
+      >
+        <Icon icon="lucide:circle-help" />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogTitle class="mb-4">{t('workbench.help')}</DialogTitle>
+        <div class="max-h-[70dvh] overflow-y-auto">
+          <HelpContent />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  /** 下载模态框按钮（窄屏：选择下载 MIDI 或 dapume）。 */
+  const DownloadModalButton = () => (
+    <Dialog>
+      <DialogTrigger
+        as={Button}
+        variant="ghost"
+        size="icon"
+        class="size-8"
+        aria-label={t('workbench.download')}
+      >
+        <Icon icon="lucide:download" />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogTitle class="mb-4">{t('workbench.download')}</DialogTitle>
+        <DownloadButtons />
+      </DialogContent>
+    </Dialog>
   );
 
   /** 钢琴卷帘本体（不含标题栏）。 */
@@ -540,7 +627,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           checked={pianoJudgeKb()}
           onChange={setPianoJudgeKb}
           icon="lucide:scan-line"
-          rotate={pianoVertical()}
+          rotate={!pianoVertical()}
           label={t('workbench.pianoJudgeLine')}
         />
       </div>
@@ -578,18 +665,19 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           <Icon icon="lucide:arrow-left" />
           {t('manager.title')}
         </Button>
-        <div class="flex items-center gap-2">
-          {/* 设置模态框开关：放在“操作”文字左边，仅图标 */}
-          <SettingsModalButton />
-          <span class="text-sm font-medium">{t('workbench.controlsTitle')}</span>
+        <div class="flex items-center gap-1">
+          {/* 速查与示例、设置（含工作台开关）模态框；放在“操作”文字左边，仅图标 */}
+          <HelpModalButton />
+          <SettingsModalButton extra={<WorkbenchSettings />} />
+          <span class="ml-1 text-sm font-medium">{t('workbench.controlsTitle')}</span>
         </div>
       </div>
       <div class="min-h-0 flex-1 overflow-y-auto">
-        <div class="space-y-5 p-4 pb-0">
+        <div class="space-y-5 p-4">
           <PlaybackControls />
           <Separator />
+          <DownloadButtons />
         </div>
-        <SecondaryControls />
       </div>
     </div>
   );
@@ -644,34 +732,31 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   );
 
   return (
+    <>
     <Show
       when={!isNarrow()}
       fallback={
-        /* ===== 窄屏：编辑器为主 + 底部播放条 + 抽屉 ===== */
-        <div class="flex h-[100dvh] flex-col bg-background">
-          {/* 顶栏 */}
-          <div class="flex items-center justify-between gap-2 border-b px-2 py-1.5">
+        /* ===== 窄屏：编辑器为主 + 底部播放条 + 钢琴卷帘抽屉 ===== */
+        <div class="flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
+          {/* 顶栏：返回(图标) + 乐谱信息(靠右、可截断) + 速查/设置/下载。
+              所有可变内容 min-w-0/可截断，确保播放时也不撑破顶栏。 */}
+          <div class="flex items-center gap-1 border-b px-2 py-1.5">
             <Button
               variant="ghost"
-              size="sm"
-              class="gap-1.5"
+              size="icon"
+              class="size-8 shrink-0"
               onClick={() => navigate({ to: '/workbench' })}
+              aria-label={t('manager.title')}
             >
               <Icon icon="lucide:arrow-left" />
-              {t('manager.title')}
             </Button>
-            <ScoreStats />
-            <div class="flex items-center gap-1">
-              <SettingsModalButton />
-              <Button
-                variant="ghost"
-                size="icon"
-                class="size-8"
-                onClick={() => setMoreOpen(true)}
-                aria-label={t('workbench.controlsTitle')}
-              >
-                <Icon icon="lucide:sliders-horizontal" />
-              </Button>
+            <div class="min-w-0 flex-1 overflow-hidden">
+              <ScoreStats class="justify-end" />
+            </div>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <HelpModalButton />
+              <SettingsModalButton extra={<WorkbenchSettings />} />
+              <DownloadModalButton />
             </div>
           </div>
           {/* 编辑器 */}
@@ -690,14 +775,6 @@ export default function Workbench(props: { doc: ScoreDoc }) {
             class="h-[70dvh]"
           >
             <PianoRollBody />
-          </BottomDrawer>
-          {/* 更多操作抽屉 */}
-          <BottomDrawer
-            open={moreOpen()}
-            onClose={() => setMoreOpen(false)}
-            title={t('workbench.controlsTitle')}
-          >
-            <SecondaryControls />
           </BottomDrawer>
         </div>
       }
@@ -757,5 +834,19 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </Show>
       </div>
     </Show>
+    {/* 载入示例 / 清空的覆盖确认（受 pendingLoad 控制，Portal 渲染于两种布局之外） */}
+    <Dialog open={pendingLoad() !== null} onOpenChange={(o) => !o && setPendingLoad(null)}>
+      <DialogContent>
+        <DialogTitle class="mb-3">{t('workbench.loadExample')}</DialogTitle>
+        <DialogDescription class="mb-4">{t('workbench.confirmOverwrite')}</DialogDescription>
+        <div class="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setPendingLoad(null)}>
+            {t('manager.cancel')}
+          </Button>
+          <Button onClick={confirmLoad}>{t('common.confirm')}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

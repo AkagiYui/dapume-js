@@ -70,6 +70,7 @@ export const zh = {
     play: '播放',
     stop: '停止',
     loading: '加载中…',
+    confirm: '确定',
   },
   guide: {
     heroTitle: '打谱么 · 线性乐谱',
@@ -132,5 +133,8 @@ export const zh = {
     duration: '时长',
     playingLocked: '播放中，编辑已锁定',
     quickRef: '速查',
+    help: '速查与示例',
+    download: '下载',
+    confirmOverwrite: '载入将覆盖当前乐谱内容，确定继续？',
   },
 } ;

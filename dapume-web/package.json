@@ -40,7 +40,7 @@
     "tw-animate-css": "^1.2.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.0",
-    "vite-plugin-iconify-offline": "^0.4.1",
+    "vite-plugin-iconify-offline": "^0.4.2",
     "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-solid": "^2.11.12",
     "vitest": "^4.1.8"
