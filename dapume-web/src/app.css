@@ -313,6 +313,15 @@ html.standalone:not(.editor-page) body {
     animation-duration: 280ms;
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
+  /* 顶栏(site-header)不随内容滑动：自成一组、原地淡入淡出（内容几乎一致 ≈ 静止）。
+     导航高亮(nav-active)为共享元素，浏览器自动在新旧激活项之间滑动，仅统一时长。 */
+  ::view-transition-group(site-header) {
+    animation-duration: 200ms;
+  }
+  ::view-transition-group(nav-active) {
+    animation-duration: 280ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
   html[data-nav='forward']::view-transition-old(root) {
     animation-name: vt-out-left;
   }

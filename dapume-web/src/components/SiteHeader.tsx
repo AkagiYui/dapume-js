@@ -18,7 +18,8 @@ import { isStandalone } from '~/lib/pwa';
 /** 顶部导航链接样式。 */
 const LINK_CLASS =
   'rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground';
-const LINK_ACTIVE = 'text-foreground bg-accent';
+// 高亮底色由独立的滑块 pill 提供（见 NavA），切页时滑动；激活态只改文字色
+const LINK_ACTIVE = 'text-foreground';
 
 /** 底部导航项样式（图标在上、文字在下）。 */
 const BOTTOM_LINK =
@@ -33,12 +34,14 @@ export function SiteHeader() {
   );
 }
 
-/** 带方向感视图过渡的导航锚点；保留 href 以利无障碍/SEO，点击改走过渡导航。 */
+/** 带方向感视图过渡的导航锚点；保留 href 以利无障碍/SEO，点击改走过渡导航。
+ * pill=true 时激活态渲染一个共享元素高亮块（view-transition-name: nav-active），切页时滑动到新激活项。 */
 function NavA(props: {
   to: string;
   exact?: boolean;
   class: string;
   activeClass: string;
+  pill?: boolean;
   children: JSX.Element;
 }) {
   const navigate = useNavigate();
@@ -48,7 +51,7 @@ function NavA(props: {
   return (
     <a
       href={props.to}
-      class={cn(props.class, active() && props.activeClass)}
+      class={cn('relative isolate', props.class, active() && props.activeClass)}
       onClick={(e) => {
         // 仅拦截普通左键点击（保留 Cmd/Ctrl/中键新开标签等原生行为）
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -56,6 +59,12 @@ function NavA(props: {
         navigateWithTransition(() => void navigate({ to: props.to }), location().pathname, props.to);
       }}
     >
+      <Show when={props.pill && active()}>
+        <span
+          class="absolute inset-0 -z-10 rounded-md bg-accent"
+          style={{ 'view-transition-name': 'nav-active' }}
+        />
+      </Show>
       {props.children}
     </a>
   );
@@ -64,7 +73,10 @@ function NavA(props: {
 /** 普通（浏览器标签页）形态：顶部粘性头部。 */
 function TopHeader() {
   return (
-    <header class="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
+    <header
+      class="sticky top-0 z-20 border-b bg-background/80 backdrop-blur"
+      style={{ 'view-transition-name': 'site-header' }}
+    >
       <div class="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
         <NavA to="/" exact class="flex items-baseline gap-2" activeClass="">
           <span class="text-lg font-bold">{t('app.title')}</span>
@@ -88,13 +100,13 @@ function TopHeader() {
           </Show>
 
           <nav class="flex items-center gap-0.5">
-            <NavA to="/" exact class={LINK_CLASS} activeClass={LINK_ACTIVE}>
+            <NavA to="/" exact pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
               {t('nav.guide')}
             </NavA>
-            <NavA to="/developers" class={LINK_CLASS} activeClass={LINK_ACTIVE}>
+            <NavA to="/developers" pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
               {t('nav.developers')}
             </NavA>
-            <NavA to="/workbench" class={LINK_CLASS} activeClass={LINK_ACTIVE}>
+            <NavA to="/workbench" pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
               {t('nav.workbench')}
             </NavA>
           </nav>
@@ -110,7 +122,7 @@ function BottomNav() {
   return (
     <nav
       class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/90 backdrop-blur"
-      style={{ 'padding-bottom': 'env(safe-area-inset-bottom)' }}
+      style={{ 'padding-bottom': 'env(safe-area-inset-bottom)', 'view-transition-name': 'site-header' }}
     >
       <div class="mx-auto flex max-w-md items-stretch justify-around gap-1 px-2">
         <NavA to="/" exact class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>

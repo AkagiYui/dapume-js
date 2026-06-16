@@ -5,7 +5,8 @@
  * - division = 480 ticks/四分音符（PPQ）。
  * - 第 0 轨为「指挥轨」：写入 4/4 拍号，并按乐谱各段 bpm 写入 set_tempo
  *   （真实速度；多段变速也逐段写入对应 tempo）。
- * - 其后每条乐谱音轨各为一条 MTrk：program_change(0) + note_on/note_off + end_of_track。
+ * - 第 1 轨为单条复音演奏轨：program_change(0) + 全部音符的 note_on/note_off + end_of_track
+ *   （独奏钢琴的 MIDI 最佳实践，不按声部分轨；听感与分轨完全一致）。
  * - 音符位置由「音乐时间」换算为 tick：先按生效 bpm 把毫秒折算为拍，再乘 PPQ。
  *   因此小节/拍线对齐、速度准确（不再用「把毫秒直接当作 tick」的近似）。
  */
@@ -91,21 +92,42 @@ function encodeConductor(sections: DapumeSection[]): number[] {
   return events;
 }
 
-/** 单条音轨：program_change(0) + note_on/note_off（tick 制）+ end_of_track。 */
-function encodeTrack(notes: DapumeNote[], sections: DapumeSection[]): number[] {
+/**
+ * 单条复音演奏轨：program_change(0) + 全部音符的 note_on/note_off（tick 制）+ end_of_track。
+ *
+ * MIDI 最佳实践：独奏钢琴用一条复音音轨即可，不必为每个并行声部单开一条 MTrk
+ * （所有声部本就同通道、同音色，分轨只是组织形式、听感无区别）。这里把所有音符的
+ * on/off 事件按 tick 排序后顺序写入：同 tick 时 note_off 先于 note_on，避免切断刚结束的音。
+ */
+function encodePerformanceTrack(notes: DapumeNote[], sections: DapumeSection[]): number[] {
   const events: number[] = [];
   events.push(...writeVarLen(0), 0xc0 | CHANNEL, 0x00); // 音色：钢琴（program 0）
 
-  let lastTick = 0;
+  interface Ev {
+    tick: number;
+    on: boolean;
+    pitch: number;
+  }
+  const evs: Ev[] = [];
   for (const note of notes) {
     const pitch = Math.max(0, Math.min(127, note.pitch)) & 0x7f;
     const startTick = msToTicks(note.startTime, sections);
-    const endTick = msToTicks(note.startTime + note.duration, sections);
-    // note_on：delta = 本音符起始 tick - 上一事件 tick
-    events.push(...writeVarLen(Math.max(0, startTick - lastTick)), 0x90 | CHANNEL, pitch, VELOCITY);
-    // note_off：delta = 本音符 tick 时长
-    events.push(...writeVarLen(Math.max(0, endTick - startTick)), 0x80 | CHANNEL, pitch, VELOCITY);
-    lastTick = endTick;
+    // 至少 1 tick，避免零长度音符把 on/off 落在同一 tick 造成排序歧义
+    const endTick = Math.max(startTick + 1, msToTicks(note.startTime + note.duration, sections));
+    evs.push({ tick: startTick, on: true, pitch }, { tick: endTick, on: false, pitch });
+  }
+  // 先按 tick；同 tick 时 note_off 先于 note_on；再按音高稳定排序
+  evs.sort((a, b) => a.tick - b.tick || (a.on === b.on ? a.pitch - b.pitch : a.on ? 1 : -1));
+
+  let lastTick = 0;
+  for (const ev of evs) {
+    events.push(
+      ...writeVarLen(Math.max(0, ev.tick - lastTick)),
+      (ev.on ? 0x90 : 0x80) | CHANNEL,
+      ev.pitch,
+      VELOCITY,
+    );
+    lastTick = ev.tick;
   }
 
   events.push(...writeVarLen(0), 0xff, 0x2f, 0x00); // end_of_track
@@ -135,9 +157,11 @@ export function toMidi(score: DapumeScore): Uint8Array {
       ? score.sections
       : [{ startTime: 0, tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM, key: 'C' }];
 
-  // 指挥轨 + 各乐谱音轨
-  const trackBlocks: number[][] = [encodeConductor(sections)];
-  for (const track of score.tracks) trackBlocks.push(encodeTrack(track, sections));
+  // 指挥轨 + 一条复音演奏轨（所有声部合并；听感与多轨一致，但更符合独奏 MIDI 习惯）
+  const trackBlocks: number[][] = [
+    encodeConductor(sections),
+    encodePerformanceTrack(score.notes, sections),
+  ];
 
   const bytes: number[] = [];
   // 头块 MThd：长度 6、格式 1、轨道数、每四分音符 tick 数

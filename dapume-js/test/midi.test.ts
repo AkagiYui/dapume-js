@@ -85,10 +85,13 @@ describe('MIDI 结构', () => {
     expect(m.ntracks).toBe(2); // 指挥轨 + 一条音轨
   });
 
-  it('轨道数 = 指挥轨 + score.trackCount', () => {
+  it('总是 2 轨（指挥轨 + 一条复音演奏轨），并合并全部音符', () => {
     const score = parse('1=C 120bpm\n1234(567)');
     const m = parseMidi(toMidi(score));
-    expect(m.ntracks).toBe(1 + score.trackCount);
+    expect(m.ntracks).toBe(2); // 不再按声部分轨；多声部合并为一条复音轨
+    // 演奏轨的 note_on 数 == 总音符数（复音合并、不丢音）
+    const noteOns = m.tracks[1]!.events.filter((e) => e.type === 'ch:90');
+    expect(noteOns.length).toBe(score.notes.length);
   });
 
   it('每条轨道以 end_of_track 结尾', () => {
