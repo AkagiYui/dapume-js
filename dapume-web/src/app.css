@@ -315,6 +315,13 @@ html.standalone:not(.editor-page) body {
 /* ===== 页面切换的方向感视图过渡（前进左滑、后退右滑；由 SiteHeader 设置 html[data-nav]）。
    不支持 View Transitions 的浏览器无此动画但功能不受影响。 ===== */
 @media (prefers-reduced-motion: no-preference) {
+  /* 无原生 View Transitions 时的轻量退化：新页面仍按导航方向入场。 */
+  html[data-nav-fallback='forward'] #root > * {
+    animation: vt-in-right 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  html[data-nav-fallback='back'] #root > * {
+    animation: vt-in-left 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
   ::view-transition-old(root),
   ::view-transition-new(root) {
     animation-duration: 280ms;

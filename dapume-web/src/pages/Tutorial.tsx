@@ -3,7 +3,7 @@
  * 每步一个可播放示例（播放时高亮当前发声字符），底部一键进入工作台动手写。
  */
 import { For, onCleanup, onMount } from 'solid-js';
-import { useNavigate } from '@tanstack/solid-router';
+import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { TUTORIAL_SECTIONS } from '~/data/tutorial';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
@@ -12,9 +12,13 @@ import { SiteHeader } from '~/components/SiteHeader';
 import { SyntaxSections } from '~/components/SyntaxSections';
 import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
+import { navigateWithTransition } from '~/lib/viewTransition';
 
 export default function Tutorial() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const go = (to: '/workbench' | '/docs') =>
+    navigateWithTransition(() => navigate({ to }), location().pathname, to);
 
   // 进入页面即预热音源（加载进度显示在 header 中）
   onMount(() => {
@@ -36,11 +40,11 @@ export default function Tutorial() {
           {t('tutorial.heroSubtitle')}
         </p>
         <div class="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
+          <Button size="lg" class="gap-2" onClick={() => go('/workbench')}>
             {t('tutorial.openWorkbench')}
             <Icon icon="lucide:arrow-right" />
           </Button>
-          <Button size="lg" variant="outline" class="gap-2" onClick={() => navigate({ to: '/docs' })}>
+          <Button size="lg" variant="outline" class="gap-2" onClick={() => go('/docs')}>
             <Icon icon="lucide:book-open" />
             {t('tutorial.fullReference')}
           </Button>
@@ -67,7 +71,7 @@ export default function Tutorial() {
 
         <div class="space-y-3 py-10 text-center">
           <p class="text-muted-foreground">{t('tutorial.outro')}</p>
-          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
+          <Button size="lg" class="gap-2" onClick={() => go('/workbench')}>
             {t('tutorial.openWorkbench')}
             <Icon icon="lucide:arrow-right" />
           </Button>

@@ -196,6 +196,8 @@ function relativeToAbsolute(rel: RelativeNote[], param: ScoreParameters): Dapume
     // 与 Python int() 一致：对非负数取整即截断
     startTime: Math.trunc(n.startBeat * msPerBeat),
     duration: Math.trunc(n.noteValue * msPerBeat),
+    startBeat: n.startBeat,
+    durationBeats: n.noteValue,
     srcStart: n.srcStart,
     srcEnd: n.srcEnd,
     isChord: n.isChord,
@@ -319,6 +321,7 @@ export function parse(text: string): DapumeScore {
   let curParam: ScoreParameters = { tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM };
   let curKey = 'C';
   let stTime = 0;
+  let stBeat = 0;
 
   // 当前块累积（相对拍）
   let blockRel: RelativeNote[] = [];
@@ -330,12 +333,20 @@ export function parse(text: string): DapumeScore {
     if (blockRel.length > 0) {
       const abs = relativeToAbsolute(blockRel, curParam);
       const blockStart = stTime;
+      const blockStartBeat = stBeat;
       for (const n of abs) {
         n.startTime += stTime;
+        n.startBeat += stBeat;
         allEvents.push(n);
       }
-      // 记录该段的调号/速度（用于按时间查询当前 1=? 与 bpm）
-      sections.push({ startTime: blockStart, tonic: curParam.tonic, bpm: curParam.bpm, key: curKey });
+      // 同时记录精确拍位；小节计算直接使用拍，不再从截断后的毫秒反推。
+      sections.push({
+        startTime: blockStart,
+        startBeat: blockStartBeat,
+        tonic: curParam.tonic,
+        bpm: curParam.bpm,
+        key: curKey,
+      });
       // 下一块从「主轨(track 0)最后一个音符的结束」处接续——与原单块顺序解析逐位一致；
       // 行内同时音右对齐、不延长主轨；若本块仅有整行括号（无主轨），退回用整块最后一个音符。
       let lastMain = abs[abs.length - 1]!;
@@ -346,6 +357,7 @@ export function parse(text: string): DapumeScore {
         }
       }
       stTime = lastMain.startTime + lastMain.duration;
+      stBeat = lastMain.startBeat + lastMain.durationBeats;
     }
     blockRel = [];
     mainBeat = 0;
@@ -423,9 +435,11 @@ export function parse(text: string): DapumeScore {
 
   // 总时长
   let durationMs = 0;
+  let durationBeats = 0;
   for (const n of events) durationMs = Math.max(durationMs, n.startTime + n.duration);
+  for (const n of events) durationBeats = Math.max(durationBeats, n.startBeat + n.durationBeats);
 
-  return { tracks, notes, events, trackCount, durationMs, sections };
+  return { tracks, notes, events, trackCount, durationMs, durationBeats, sections };
 }
 
 /**
@@ -435,7 +449,13 @@ export function parse(text: string): DapumeScore {
  * @param timeMs 当前时刻（毫秒）。
  */
 export function paramsAt(score: DapumeScore, timeMs: number): DapumeSection {
-  let cur: DapumeSection = { startTime: 0, tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM, key: 'C' };
+  let cur: DapumeSection = {
+    startTime: 0,
+    startBeat: 0,
+    tonic: DEFAULT_TONIC,
+    bpm: DEFAULT_BPM,
+    key: 'C',
+  };
   for (const s of score.sections) {
     if (s.startTime <= timeMs) cur = s;
     else break;

@@ -3,7 +3,7 @@
  * （播放时高亮当前发声的字符）。需要循序渐进的入门请见「教程」(/tutorial)。
  */
 import { For, Show, onCleanup, onMount } from 'solid-js';
-import { useNavigate } from '@tanstack/solid-router';
+import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { GUIDE_SECTIONS } from '~/data/guide';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
@@ -13,9 +13,13 @@ import { SyntaxSections } from '~/components/SyntaxSections';
 import { canInstall, promptInstall } from '~/lib/pwa';
 import { Button } from '~/components/ui/button';
 import { Icon } from '~/components/Icon';
+import { navigateWithTransition } from '~/lib/viewTransition';
 
 export default function Guide() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const go = (to: '/workbench' | '/tutorial') =>
+    navigateWithTransition(() => navigate({ to }), location().pathname, to);
 
   // 进入页面即预热音源（加载进度显示在 header 中）
   onMount(() => {
@@ -37,12 +41,12 @@ export default function Guide() {
           {t('guide.heroSubtitle')}
         </p>
         <div class="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
+          <Button size="lg" class="gap-2" onClick={() => go('/workbench')}>
             {t('guide.heroCta')}
             <Icon icon="lucide:arrow-right" />
           </Button>
           {/* 新手入门：跳转循序渐进的教程页 */}
-          <Button size="lg" variant="outline" class="gap-2" onClick={() => navigate({ to: '/tutorial' })}>
+          <Button size="lg" variant="outline" class="gap-2" onClick={() => go('/tutorial')}>
             <Icon icon="lucide:graduation-cap" />
             {t('guide.startTutorial')}
           </Button>
@@ -75,7 +79,7 @@ export default function Guide() {
         <SyntaxSections sections={GUIDE_SECTIONS} />
 
         <div class="py-10 text-center">
-          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
+          <Button size="lg" class="gap-2" onClick={() => go('/workbench')}>
             {t('guide.heroCta')}
             <Icon icon="lucide:arrow-right" />
           </Button>

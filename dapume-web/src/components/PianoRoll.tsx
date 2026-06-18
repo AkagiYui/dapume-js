@@ -45,6 +45,15 @@ const KEYBOARD_W = 68;
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 /** 卷帘至少展示三个完整八度。 */
 const MIN_VISIBLE_SEMITONES = 36;
+const WHITE_KEY_INDEX = new Map([
+  [0, 0],
+  [2, 1],
+  [4, 2],
+  [5, 3],
+  [7, 4],
+  [9, 5],
+  [11, 6],
+]);
 
 function isBlackKey(pitch: number): boolean {
   return BLACK_KEYS.has(((pitch % 12) + 12) % 12);
@@ -208,6 +217,18 @@ export function PianoRoll(props: PianoRollProps) {
       if (vertical) ctx.strokeRect(p0, t0, pLen, tLen);
       else ctx.strokeRect(t0, p0, tLen, pLen);
     };
+    const drawLogicalPolygon = (points: readonly { t: number; p: number }[]) => {
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        const x = vertical ? point.p : point.t;
+        const y = vertical ? point.t : point.p;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    };
     // 在时间轴坐标 tc 处画一条贯穿音高轴的线
     const lineAcrossPitch = (tc: number) => {
       ctx.beginPath();
@@ -243,9 +264,16 @@ export function PianoRoll(props: PianoRollProps) {
       const tc = tPos(timeAtBeat(measure * BEATS_PER_MEASURE, props.sections));
       if (tc < naLo || tc > naHi) continue;
       lineAcrossPitch(tc);
-      const label = `M${measure + 1}`;
-      if (vertical) ctx.fillText(label, 2, tc + 11);
-      else ctx.fillText(label, tc + 3, 11);
+      const label = String(measure + 1);
+      // 标号放在小节线的“未来”一侧，也就是瀑布运动方向的远端：
+      // 下落时在线上方、左落时在线右侧；镜像布局自动反向。
+      if (vertical) {
+        ctx.fillText(label, 3, kbAtStart ? tc + 11 : tc - 4);
+      } else {
+        ctx.textAlign = kbAtStart ? 'left' : 'right';
+        ctx.fillText(label, kbAtStart ? tc + 3 : tc - 3, 11);
+        ctx.textAlign = 'left';
+      }
     }
 
     // 音符（裁剪到音符区 [naLo, naHi]；时间方向可能反向，故取两端的 min/max）
@@ -296,17 +324,55 @@ export function PianoRoll(props: PianoRollProps) {
     const whiteFill = bg;
     const whiteBorder = border;
 
-    // 白键铺满键盘深度，使用产品现有背景与边框 token。
+    // 白键保持现有扁平配色，只把轮廓改成真实键盘的“窄后段 + 宽前段”凸字形。
+    // 每个八度的七个白键前端等宽；后端仍对齐十二平均律半音槽，黑键与瀑布继续等宽。
     for (let p = lo; p <= hi; p++) {
       if (isBlackKey(p)) continue;
       const lane = pitchRect(p);
+      const narrowStart = lane.start;
+      const narrowEnd = lane.start + lane.length;
+      const octaveBase = Math.floor(p / 12) * 12;
+      const octaveFirst = pitchRect(octaveBase);
+      const octaveLast = pitchRect(octaveBase + 11);
+      const octaveStart = Math.min(octaveFirst.start, octaveLast.start);
+      const octaveEnd = Math.max(
+        octaveFirst.start + octaveFirst.length,
+        octaveLast.start + octaveLast.length,
+      );
+      const whiteIndex = WHITE_KEY_INDEX.get(((p % 12) + 12) % 12) ?? 0;
+      const coordinateIndex = highAtCoord0 ? 6 - whiteIndex : whiteIndex;
+      const whiteFrontWidth = (octaveEnd - octaveStart) / 7;
+      const wideStart = octaveStart + coordinateIndex * whiteFrontWidth;
+      const wideEnd = wideStart + whiteFrontWidth;
       const pressFill = activePitchColor.get(p);
       const pressed = pressFill !== undefined;
       ctx.fillStyle = pressed ? pressFill : whiteFill;
-      fillRect(keyBodyStart, keyBodyLen, lane.start, lane.length);
       ctx.strokeStyle = whiteBorder;
       ctx.lineWidth = 1;
-      strokeRect(keyBodyStart + 0.5, keyBodyLen - 1, lane.start + 0.5, lane.length - 1);
+      const keyEnd = keyBodyStart + keyBodyLen;
+      const shoulder = kbAtStart ? blackKeyStart : blackKeyStart + blackKeyLen;
+      const points = kbAtStart
+        ? [
+            { t: keyBodyStart + 0.5, p: wideStart + 0.5 },
+            { t: shoulder, p: wideStart + 0.5 },
+            { t: shoulder, p: narrowStart + 0.5 },
+            { t: keyEnd - 0.5, p: narrowStart + 0.5 },
+            { t: keyEnd - 0.5, p: narrowEnd - 0.5 },
+            { t: shoulder, p: narrowEnd - 0.5 },
+            { t: shoulder, p: wideEnd - 0.5 },
+            { t: keyBodyStart + 0.5, p: wideEnd - 0.5 },
+          ]
+        : [
+            { t: keyBodyStart + 0.5, p: narrowStart + 0.5 },
+            { t: shoulder, p: narrowStart + 0.5 },
+            { t: shoulder, p: wideStart + 0.5 },
+            { t: keyEnd - 0.5, p: wideStart + 0.5 },
+            { t: keyEnd - 0.5, p: wideEnd - 0.5 },
+            { t: shoulder, p: wideEnd - 0.5 },
+            { t: shoulder, p: narrowEnd - 0.5 },
+            { t: keyBodyStart + 0.5, p: narrowEnd - 0.5 },
+          ];
+      drawLogicalPolygon(points);
 
       if (p % 12 === 0) {
         ctx.fillStyle = pressed ? primaryFg : '#77746d';
@@ -503,7 +569,7 @@ export function PianoRoll(props: PianoRollProps) {
         aria-valuemin={0}
         aria-valuemax={props.durationMs}
         aria-valuenow={Math.round(props.currentTimeMs)}
-        aria-valuetext={`M${measureAtTime(props.currentTimeMs, props.sections)}`}
+        aria-valuetext={`Measure ${measureAtTime(props.currentTimeMs, props.sections)}`}
         onWheel={onWheel}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}

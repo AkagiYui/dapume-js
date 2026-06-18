@@ -191,6 +191,30 @@ export function seek(ms: number): void {
 }
 
 /**
+ * 播放一个很短的节拍器木鱼声。第一拍频率更高、音量稍大，形成“嘀嗒嗒嗒”的四拍重音。
+ * 与钢琴共用 AudioContext，但不依赖采样音色是否已加载完成。
+ */
+export async function playMetronomeTick(accent: boolean, scoreTimeMs?: number): Promise<void> {
+  const context = getCtx();
+  await context.resume();
+  const now = context.currentTime;
+  const scheduled =
+    scoreTimeMs !== undefined && isPlaying()
+      ? Math.max(now, baseCtxTime + (scoreTimeMs - baseOffsetMs) / 1000)
+      : now;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = 'triangle';
+  oscillator.frequency.setValueAtTime(accent ? 1760 : 1120, scheduled);
+  gain.gain.setValueAtTime(accent ? 0.12 : 0.075, scheduled);
+  gain.gain.exponentialRampToValueAtTime(0.0001, scheduled + (accent ? 0.055 : 0.04));
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(scheduled);
+  oscillator.stop(scheduled + (accent ? 0.055 : 0.04));
+}
+
+/**
  * 输出设备变化时自动暂停（尽力而为）。
  *
  * 浏览器没有「耳机断开」的标准事件；可用的最佳信号是 `mediaDevices.devicechange`：

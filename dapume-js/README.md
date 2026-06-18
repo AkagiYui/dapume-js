@@ -85,6 +85,7 @@ interface DapumeScore {
   events: DapumeEvent[];      // 所有时间轴事件（含休止符），已按开始时刻排序
   trackCount: number;         // 音轨数量
   durationMs: number;         // 总时长（毫秒）
+  durationBeats: number;      // 精确总拍数（不受 BPM 与毫秒取整影响）
   sections: DapumeSection[];  // 各参数段（调号/速度随时间的变化），按开始时刻升序
 }
 
@@ -93,6 +94,8 @@ interface DapumeNote {
   pitch: number;      // MIDI 音高（中央 C = 60）
   startTime: number;  // 开始时刻（毫秒）
   duration: number;   // 持续时长（毫秒）
+  startBeat: number;  // 从乐谱开头累计的精确起始拍
+  durationBeats: number; // 精确持续拍数
   srcStart: number;   // 触发该音符的源字符起始下标（含）
   srcEnd: number;     // 触发该音符的源字符结束下标（不含）
   isChord: boolean;   // 是否来自和弦记号 [...]
@@ -130,7 +133,7 @@ interface Token {
 
 ### `paramsAt(score: DapumeScore, timeMs: number): DapumeSection`
 
-返回在给定时刻生效的调号与速度（`{ startTime, tonic, bpm, key }`），常用于播放时实时显示「1=? 与 bpm」。
+返回在给定时刻生效的调号与速度（`{ startTime, startBeat, tonic, bpm, key }`），常用于播放时实时显示调性与速度。
 
 ---
 

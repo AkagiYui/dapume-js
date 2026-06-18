@@ -164,8 +164,8 @@ describe('参数段（sections / paramsAt）', () => {
   it('记录每段的调号与速度及其起始时刻', () => {
     const score = parse('1=C\n123\n1=D\n456');
     expect(score.sections).toEqual([
-      { startTime: 0, tonic: 60, bpm: 120, key: 'C' },
-      { startTime: 750, tonic: 62, bpm: 120, key: 'D' },
+      { startTime: 0, startBeat: 0, tonic: 60, bpm: 120, key: 'C' },
+      { startTime: 750, startBeat: 1.5, tonic: 62, bpm: 120, key: 'D' },
     ]);
   });
 

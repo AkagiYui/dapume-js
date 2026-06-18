@@ -151,7 +151,7 @@ export function toMidi(score: DapumeScore): Uint8Array {
   const sections: DapumeSection[] =
     score.sections.length > 0
       ? score.sections
-      : [{ startTime: 0, tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM, key: 'C' }];
+      : [{ startTime: 0, startBeat: 0, tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM, key: 'C' }];
 
   // 指挥轨 + 各乐谱音轨
   const trackBlocks: number[][] = [encodeConductor(sections)];

@@ -67,9 +67,31 @@ export function SyntaxSections(props: { sections: GuideSection[]; numbered?: boo
             </Show>
             {section.title[locale()]}
           </h2>
-          <div class="space-y-3 leading-relaxed text-foreground/90">
-            <For each={section.paragraphs[locale()]}>{(p) => <p>{p}</p>}</For>
-          </div>
+          <Show
+            when={section.flow}
+            fallback={
+              <div class="space-y-3 leading-relaxed text-foreground/90">
+                <For each={section.paragraphs[locale()]}>{(p) => <p>{p}</p>}</For>
+              </div>
+            }
+          >
+            {(flow) => (
+              <div class="space-y-4">
+                <For each={flow()}>
+                  {(block) =>
+                    block.type === 'text' ? (
+                      <p class="leading-relaxed text-foreground/90">{block.text[locale()]}</p>
+                    ) : (
+                      <PlayableExample
+                        code={block.example.code}
+                        caption={block.example.caption[locale()]}
+                      />
+                    )
+                  }
+                </For>
+              </div>
+            )}
+          </Show>
 
           {/* 参考表格 */}
           <Show when={section.table}>
@@ -100,11 +122,13 @@ export function SyntaxSections(props: { sections: GuideSection[]; numbered?: boo
           </Show>
 
           {/* 示例（可播放，播放时高亮当前音符） */}
-          <div class="mt-5 space-y-3">
-            <For each={section.examples}>
-              {(ex) => <PlayableExample code={ex.code} caption={ex.caption[locale()]} />}
-            </For>
-          </div>
+          <Show when={!section.flow}>
+            <div class="mt-5 space-y-3">
+              <For each={section.examples}>
+                {(ex) => <PlayableExample code={ex.code} caption={ex.caption[locale()]} />}
+              </For>
+            </div>
+          </Show>
         </section>
       )}
     </For>

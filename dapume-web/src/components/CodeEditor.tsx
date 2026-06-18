@@ -128,7 +128,7 @@ const stickyEnabledField = StateField.define<boolean>({
  * 当某个参数行（1=调号 / 速度行）滚出视口顶部时，把它固定显示在编辑器顶部；点击回到该行。
  * 插件常驻，显隐由 {@link stickyEnabledField} 控制。
  */
-function stickyHeaderPlugin() {
+function stickyHeaderPlugin(onLineClick?: (lineNumber: number) => void) {
   return ViewPlugin.fromClass(
     class {
       view: EditorView;
@@ -214,6 +214,7 @@ function stickyHeaderPlugin() {
       jump() {
         if (this.current == null) return;
         const v = this.view;
+        onLineClick?.(this.current);
         // 平滑滚动回该参数行（停在视口顶部），而非瞬间跳转
         const block = v.lineBlockAt(v.state.doc.line(this.current).from);
         v.scrollDOM.scrollTo({ top: block.top, behavior: 'smooth' });
@@ -239,12 +240,12 @@ function scrollLineToAnchor(v: EditorView, pos: number, smooth: boolean): void {
 
 const editableComp = new Compartment();
 
-/** 行号前显示当前行开始的小节；同一小节的后续行只保留普通行号。 */
-function measureLineNumbers(measures: readonly (number | null)[]) {
+/** 只显示小节号；同一小节跨多行时，仅第一条音乐行有数字。 */
+function measureGutter(measures: readonly (number | null)[]) {
   return lineNumbers({
     formatNumber(lineNumber) {
       const measure = measures[lineNumber] ?? null;
-      return measure === null ? `· ${lineNumber}` : `M${measure} · ${lineNumber}`;
+      return measure === null ? '' : String(measure);
     },
   });
 }
@@ -260,7 +261,7 @@ export interface CodeEditorProps {
   smoothScroll?: boolean;
   /** 是否启用「参数行粘性置顶」。 */
   sticky?: boolean;
-  /** 1-based 行号对应的小节编号；同一小节只在第一条音乐行提供编号。 */
+  /** 1-based 源码行对应的小节编号；同一小节只在第一条音乐行提供编号。 */
   measureNumbers?: readonly (number | null)[];
   /** 点击某一行时通知上层，用于把播放进度定位到该行行首。 */
   onLineClick?: (lineNumber: number) => void;
@@ -279,7 +280,7 @@ export function CodeEditor(props: CodeEditorProps) {
       state: EditorState.create({
         doc: props.value,
         extensions: [
-          lineNumberComp.of(measureLineNumbers(props.measureNumbers ?? [])),
+          lineNumberComp.of(measureGutter(props.measureNumbers ?? [])),
           history(),
           drawSelection(),
           highlightActiveLine(),
@@ -295,7 +296,7 @@ export function CodeEditor(props: CodeEditorProps) {
             EditorView.editable.of(!props.readOnly),
           ]),
           stickyEnabledField,
-          stickyHeaderPlugin(),
+          stickyHeaderPlugin((lineNumber) => props.onLineClick?.(lineNumber)),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) props.onChange?.(u.state.doc.toString());
           }),
@@ -332,10 +333,10 @@ export function CodeEditor(props: CodeEditorProps) {
     });
   });
 
-  // 乐谱变化后刷新“小节号 · 行号” gutter；小节编号由解析后的事件时间自动推导。
+  // 乐谱变化后刷新纯小节号 gutter；同一小节的后续行保持空白。
   createEffect(() => {
     const measures = props.measureNumbers ?? [];
-    view?.dispatch({ effects: lineNumberComp.reconfigure(measureLineNumbers(measures)) });
+    view?.dispatch({ effects: lineNumberComp.reconfigure(measureGutter(measures)) });
   });
 
   // 粘性参数行开关：插件常驻，仅切换状态字段（含初始值，故不 defer）

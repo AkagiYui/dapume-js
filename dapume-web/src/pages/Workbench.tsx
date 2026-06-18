@@ -11,7 +11,7 @@
  * 播放时锁定编辑并高亮当前发声的音符字符与所在行；谱面、各开关、各区域尺寸均持久化到 localStorage。
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
-import { useNavigate } from '@tanstack/solid-router';
+import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { activeEventsAt, parse, paramsAt, toMidi } from 'dapume-js';
 import type { DapumeScore } from 'dapume-js';
 
@@ -32,7 +32,14 @@ import { EXAMPLES } from '~/data/examples';
 import { renameScore, saveScoreContent, setLastScoreId } from '~/stores/scores';
 import type { ScoreDoc } from '~/stores/scores';
 import { downloadBytes, downloadText } from '~/lib/download';
-import { measureAtTime } from '~/lib/measures';
+import {
+  beatAtTime,
+  measureAtBeat,
+  measureCount,
+  musicalPositionAtTime,
+  timeAtBeat,
+} from '~/lib/measures';
+import { navigateWithTransition } from '~/lib/viewTransition';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
 import {
@@ -44,6 +51,7 @@ import {
   pause,
   pianoState,
   play,
+  playMetronomeTick,
   seek,
   stop,
 } from '~/stores/player';
@@ -120,11 +128,13 @@ const EMPTY_SCORE: DapumeScore = {
   events: [],
   trackCount: 0,
   durationMs: 0,
+  durationBeats: 0,
   sections: [],
 };
 
 export default function Workbench(props: { doc: ScoreDoc }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // ===== 乐谱正文：来自 IndexedDB 的乐谱文档，编辑后防抖写回 =====
   const [scoreText, setScoreText] = createSignal(props.doc.content);
@@ -182,6 +192,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     Math.max(0, Math.min(500, parseInt(lsGet('dapume.visualDelay', '0'), 10) || 0)),
   );
   createEffect(() => lsSet('dapume.visualDelay', String(delayMs())));
+
+  // 节拍器开关独立持久化；实际发声只发生在播放状态。
+  const [metronomeOn, setMetronomeOn] = createSignal(lsGet('dapume.metronome', 'false') === 'true');
+  createEffect(() => lsSet('dapume.metronome', String(metronomeOn())));
 
   // ===== 窄屏适配 =====
   const narrowMedia = window.matchMedia('(max-width: 768px)');
@@ -241,6 +255,42 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 视觉时间 = 播放时间 - 延迟：卷帘与高亮整体延后，与无线耳机听到的声音对齐
   const visualTimeMs = createMemo(() => Math.max(0, currentTimeMs() - delayMs()));
 
+  /** 当前 4/4 小节与拍数，供进度条右侧实时显示。 */
+  const musicalPosition = createMemo(() => musicalPositionAtTime(currentTimeMs(), score().sections));
+
+  // rAF 驱动的播放时间每帧更新；跨过整数拍时触发一次短促节拍声，第一拍加重。
+  let lastMetronomeBeat = -1;
+  createEffect(() => {
+    const enabled = metronomeOn();
+    const playing = isPlaying();
+    const time = currentTimeMs();
+    const sections = score().sections;
+    if (!enabled || !playing || sections.length === 0) {
+      lastMetronomeBeat = -1;
+      return;
+    }
+    const absoluteBeat = beatAtTime(time, sections);
+    const beatIndex = Math.floor(absoluteBeat + 1e-6);
+    if (lastMetronomeBeat < 0) {
+      lastMetronomeBeat = beatIndex;
+      // 从整拍（尤其乐谱开头）开始播放时立即给出第一声；从半拍续播则等到下一拍。
+      if (Math.abs(absoluteBeat - beatIndex) < 0.03) {
+        void playMetronomeTick(
+          beatIndex % 4 === 0,
+          timeAtBeat(beatIndex, sections),
+        );
+      }
+      return;
+    }
+    if (beatIndex !== lastMetronomeBeat) {
+      lastMetronomeBeat = beatIndex;
+      void playMetronomeTick(
+        beatIndex % 4 === 0,
+        timeAtBeat(beatIndex, sections),
+      );
+    }
+  });
+
   // 播放/暂停时高亮当前时间轴事件对应的源字符（含休止符，用视觉时间）
   const highlights = createMemo(() => {
     if (!playActive()) return [];
@@ -276,7 +326,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     return [...set].sort((a, b) => a - b);
   });
 
-  /** 每个含乐谱事件的源码行及其最早时间。 */
+  /** 每个含乐谱事件的源码行及其最早时间、精确拍位。 */
   const lineEntries = createMemo(() => {
     const starts = [0];
     const text = scoreText();
@@ -291,14 +341,18 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       }
       return lo + 1;
     };
-    const firstByLine = new Map<number, number>();
+    const firstByLine = new Map<number, { time: number; beat: number }>();
     for (const event of score().events) {
       if (event.srcStart < 0) continue;
       const line = lineAt(event.srcStart);
       const prev = firstByLine.get(line);
-      if (prev === undefined || event.startTime < prev) firstByLine.set(line, event.startTime);
+      if (prev === undefined || event.startBeat < prev.beat) {
+        firstByLine.set(line, { time: event.startTime, beat: event.startBeat });
+      }
     }
-    return [...firstByLine].map(([line, time]) => ({ line, time })).sort((a, b) => a.line - b.line);
+    return [...firstByLine]
+      .map(([line, position]) => ({ line, ...position }))
+      .sort((a, b) => a.line - b.line);
   });
 
   // 行导航按“行首时间”步进；并行音轨若同一时刻开始，只产生一个有效跳点。
@@ -311,7 +365,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     const labels: (number | null)[] = Array(scoreText().split('\n').length + 1).fill(null);
     let previousMeasure = -1;
     for (const entry of lineEntries()) {
-      const measure = measureAtTime(entry.time, score().sections);
+      const measure = measureAtBeat(entry.beat);
       if (measure !== previousMeasure) labels[entry.line] = measure;
       previousMeasure = measure;
     }
@@ -344,15 +398,21 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   }
   function seekToLine(lineNumber: number) {
     const entries = lineEntries();
+    // 参数行通常位于第一行且没有事件；它与第一条音乐行同属乐谱起点。
+    if (entries.length > 0 && lineNumber <= entries[0]!.line) {
+      jumpTo(0);
+      return;
+    }
     const exactOrNext = entries.find((entry) => entry.line >= lineNumber) ?? entries[entries.length - 1];
     if (exactOrNext) jumpTo(exactOrNext.time);
   }
 
-  // 空格播放/暂停；方向键左右逐事件、上下逐行。输入控件保留其原生按键行为；
-  // 编辑停止态也保留光标移动，播放/暂停锁定编辑后方向键才接管进度。
+  // 空格播放/暂停；Ctrl/⌘ + 左右逐事件、Ctrl/⌘ + 上下逐行。
+  // 裸方向键始终留给编辑器光标，避免乐谱导航与文本编辑争抢。
   const onPlaybackKey = (e: KeyboardEvent) => {
     const isArrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key);
     if (e.code !== 'Space' && !isArrow) return;
+    if (isArrow && !e.ctrlKey && !e.metaKey) return;
     const el = document.activeElement as HTMLElement | null;
     const tag = el?.tagName;
     if (
@@ -364,7 +424,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         el.getAttribute('role') === 'slider')
     )
       return;
-    if (el?.isContentEditable) return;
+    if (el?.isContentEditable && !isArrow) return;
     if (e.code === 'Space') {
       if (score().notes.length === 0) return;
       e.preventDefault();
@@ -378,8 +438,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     else if (e.key === 'ArrowUp') seekToPrevLine();
     else seekToNextLine();
   };
-  window.addEventListener('keydown', onPlaybackKey);
-  onCleanup(() => window.removeEventListener('keydown', onPlaybackKey));
+  window.addEventListener('keydown', onPlaybackKey, { capture: true });
+  onCleanup(() => window.removeEventListener('keydown', onPlaybackKey, { capture: true }));
 
   // 以乐谱标题作为下载文件名（过滤掉文件名非法字符）
   const fileName = (ext: string) =>
@@ -409,8 +469,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   // ===== 可复用片段 =====
 
-  /** 乐谱信息：实时调号/速度（播放/暂停时）+ 音符数 / 音轨数。时长不在此显示（播放控制里已有）。
-   * 窄屏空间紧张时，实时调号/速度可被截断，音符/音轨数始终可见（靠右、不撑破顶栏）。 */
+  /** 乐谱信息：调号、实时速度与总小节数。 */
   const ScoreStats = (p: { class?: string }) => (
     <div class={`flex items-center gap-2 text-xs text-muted-foreground ${p.class ?? ''}`}>
       {/* 只有实际播放期间锁定编辑；暂停或点击定位后仍可直接修改。 */}
@@ -420,26 +479,20 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </InfoTip>
       </Show>
       {/* 用图标化状态替代紧挨在一起的 “1=C 160bpm”。 */}
-      <Show when={playActive()}>
-        <InfoTip label={t('workbench.key')} class="shrink-0 gap-1 font-medium text-foreground">
-          <Icon icon="mdi:music-clef-treble" />
-          <span>{liveParams().key}</span>
-        </InfoTip>
-        <InfoTip
-          label={t('workbench.tempo')}
-          class="shrink-0 gap-1 font-medium text-foreground tabular-nums"
-        >
-          <Icon icon="mdi:metronome" />
-          <span>{liveParams().bpm}</span>
-        </InfoTip>
-      </Show>
-      <InfoTip label={t('workbench.notes')} class="shrink-0 gap-1 tabular-nums">
-        <Icon icon="lucide:music" />
-        {score().notes.length}
+      <InfoTip label={t('workbench.key')} class="shrink-0 gap-1 font-medium text-foreground">
+        <Icon icon="mdi:music-clef-treble" />
+        <span>{liveParams().key}</span>
       </InfoTip>
-      <InfoTip label={t('workbench.tracks')} class="shrink-0 gap-1 tabular-nums">
-        <Icon icon="mdi:layers-triple-outline" />
-        {score().trackCount}
+      <InfoTip
+        label={t('workbench.tempo')}
+        class="shrink-0 gap-1 font-medium text-foreground tabular-nums"
+      >
+        <Icon icon="mdi:metronome" />
+        <span>{liveParams().bpm}</span>
+      </InfoTip>
+      <InfoTip label={t('workbench.measures')} class="shrink-0 gap-1 tabular-nums">
+        <Icon icon="lucide:panels-top-left" />
+        {measureCount(score().durationBeats)}
       </InfoTip>
     </div>
   );
@@ -525,7 +578,23 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         <span class="mx-1 hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground lg:inline">
           {fmt(currentTimeMs())} / {fmt(score().durationMs)}
         </span>
-        <ProgressSlider class="w-28 lg:w-44" />
+        <ProgressSlider class="w-24 lg:w-40" />
+        <InfoTip
+          label={t('workbench.measureBeat', musicalPosition())}
+          class="ml-1 shrink-0 text-xs font-medium tabular-nums text-foreground"
+        >
+          {musicalPosition().measure} · {musicalPosition().beat}
+        </InfoTip>
+        <Button
+          size="icon"
+          variant={metronomeOn() ? 'secondary' : 'ghost'}
+          class="size-7"
+          onClick={() => setMetronomeOn((value) => !value)}
+          aria-pressed={metronomeOn()}
+          aria-label={metronomeOn() ? t('workbench.metronomeOff') : t('workbench.metronomeOn')}
+        >
+          <Icon icon="mdi:metronome" />
+        </Button>
       </div>
     );
   };
@@ -838,8 +907,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       {/* 操作提示：溢出省略、不换行 */}
       <span class="hidden min-w-0 shrink truncate text-xs text-muted-foreground sm:block">
         {locale() === 'zh'
-          ? '点击定位 · 滚轮平移 · Ctrl+滚轮缩放'
-          : 'Click: seek · Wheel: pan · Ctrl+Wheel: zoom'}
+          ? '点击定位 · Ctrl+方向键导航 · 滚轮平移 · Ctrl+滚轮缩放'
+          : 'Click: seek · Ctrl+arrows: navigate · Wheel: pan · Ctrl+Wheel: zoom'}
       </span>
     </div>
   );
@@ -872,7 +941,13 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           variant="ghost"
           size="icon"
           class="size-8 shrink-0"
-          onClick={() => navigate({ to: '/workbench' })}
+          onClick={() =>
+            navigateWithTransition(
+              () => navigate({ to: '/workbench' }),
+              location().pathname,
+              '/workbench',
+            )
+          }
           aria-label={t('manager.title')}
         >
           <Icon icon="lucide:arrow-left" />
@@ -959,6 +1034,22 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </Button>
         <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(currentTimeMs())}</span>
         <ProgressSlider class="mx-1 min-w-0 flex-1" />
+        <span
+          class="shrink-0 text-xs font-medium tabular-nums"
+          title={t('workbench.measureBeat', musicalPosition())}
+        >
+          {musicalPosition().measure} · {musicalPosition().beat}
+        </span>
+        <Button
+          size="icon"
+          variant={metronomeOn() ? 'secondary' : 'ghost'}
+          class="size-8 shrink-0"
+          onClick={() => setMetronomeOn((value) => !value)}
+          aria-pressed={metronomeOn()}
+          aria-label={metronomeOn() ? t('workbench.metronomeOff') : t('workbench.metronomeOn')}
+        >
+          <Icon icon="mdi:metronome" />
+        </Button>
         <Button
           variant={pianoOpen() ? 'default' : 'outline'}
           size="icon"
@@ -986,7 +1077,13 @@ export default function Workbench(props: { doc: ScoreDoc }) {
               variant="ghost"
               size="icon"
               class="size-8 shrink-0"
-              onClick={() => navigate({ to: '/workbench' })}
+              onClick={() =>
+                navigateWithTransition(
+                  () => navigate({ to: '/workbench' }),
+                  location().pathname,
+                  '/workbench',
+                )
+              }
               aria-label={t('manager.title')}
             >
               <Icon icon="lucide:arrow-left" />

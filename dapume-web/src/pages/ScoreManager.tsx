@@ -4,7 +4,7 @@
  * 提供「直接访问时自动打开上次乐谱」开关；点击乐谱进入 /workbench/{id} 编辑。
  */
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { useNavigate } from '@tanstack/solid-router';
+import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { parse } from 'dapume-js';
 import { SiteHeader } from '~/components/SiteHeader';
 import { Button } from '~/components/ui/button';
@@ -29,6 +29,7 @@ import {
   setAutoOpenLast,
   type ScoreDoc,
 } from '~/stores/scores';
+import { navigateWithTransition } from '~/lib/viewTransition';
 
 /** 新建乐谱的初始内容。 */
 const NEW_SCORE = '1=C 120bpm\n1234567';
@@ -62,6 +63,7 @@ function formatDate(ms: number, loc: string): string {
 
 export default function ScoreManager() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [ready, setReady] = createSignal(false);
 
   // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift
@@ -84,7 +86,15 @@ export default function ScoreManager() {
 
   async function onNew() {
     const doc = await createScore(t('manager.untitled'), NEW_SCORE);
-    navigate({ to: '/workbench/$id', params: { id: doc.id } });
+    openScore(doc.id);
+  }
+
+  function openScore(id: string) {
+    navigateWithTransition(
+      () => navigate({ to: '/workbench/$id', params: { id } }),
+      location().pathname,
+      `/workbench/${id}`,
+    );
   }
 
   // 重命名 / 删除改用组件库弹窗（替代浏览器 prompt/confirm）
@@ -123,7 +133,7 @@ export default function ScoreManager() {
   async function onImported(title: string, content: string) {
     setImportOpen(false);
     const doc = await createScore(title.trim() || t('manager.untitled'), content);
-    navigate({ to: '/workbench/$id', params: { id: doc.id } });
+    openScore(doc.id);
   }
 
   return (
@@ -195,7 +205,7 @@ export default function ScoreManager() {
                           size="sm"
                           variant="secondary"
                           class="gap-1.5"
-                          onClick={() => navigate({ to: '/workbench/$id', params: { id: doc.id } })}
+                          onClick={() => openScore(doc.id)}
                         >
                           <Icon icon="lucide:square-pen" />
                           {t('manager.open')}

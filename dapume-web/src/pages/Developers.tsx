@@ -2,7 +2,7 @@
  * 开发者页：介绍如何在自己的项目中使用 dapume-js 包，含安装命令与示例代码。
  */
 import { For, onMount } from 'solid-js';
-import { useNavigate } from '@tanstack/solid-router';
+import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { SiteHeader } from '~/components/SiteHeader';
 import { CodeBlock } from '~/components/CodeBlock';
 import { HighlightedCode } from '~/components/HighlightedCode';
@@ -13,6 +13,7 @@ import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
 import type { Locale } from '~/stores/settings';
 import { ensurePiano } from '~/stores/player';
+import { navigateWithTransition } from '~/lib/viewTransition';
 
 const REPO_URL = 'https://github.com/AkagiYui/dapume-js';
 const PY_REPO_URL = 'https://github.com/ScarlettRinko/dapume';
@@ -97,6 +98,7 @@ const TYPES = (l: Locale) => {
   events: DapumeEvent[];      // ${z ? '时间轴事件（含休止符）' : 'timeline events (including rests)'}
   trackCount: number;
   durationMs: number;
+  durationBeats: number;      // ${z ? '精确总拍数，不受 BPM 影响' : 'exact total beats, independent of BPM'}
   sections: DapumeSection[];  // ${z ? '各参数段（调号/速度随时间变化）' : 'parameter sections (key/tempo over time)'}
 }
 
@@ -105,6 +107,8 @@ interface DapumeNote {
   pitch: number;     // ${z ? 'MIDI 音高，中央 C = 60' : 'MIDI pitch, middle C = 60'}
   startTime: number; // ${z ? '毫秒' : 'milliseconds'}
   duration: number;  // ${z ? '毫秒' : 'milliseconds'}
+  startBeat: number; // ${z ? '从乐谱开头累计的精确拍位' : 'exact beat from score start'}
+  durationBeats: number;
   srcStart: number;  // ${z ? '源字符起始下标（用于高亮）' : 'source char start index (for highlighting)'}
   srcEnd: number;
   isChord: boolean;
@@ -112,6 +116,7 @@ interface DapumeNote {
 
 interface DapumeSection {
   startTime: number; // ${z ? '该段起始时刻（毫秒）' : 'section start time (ms)'}
+  startBeat: number; // ${z ? '该段起始拍位' : 'section start beat'}
   tonic: number;     // ${z ? '主音 MIDI' : 'tonic MIDI pitch'}
   bpm: number;
   key: string;       // ${z ? '调号标签，如 "C"、"Bb."' : 'key label, e.g. "C", "Bb."'}
@@ -150,6 +155,7 @@ function Section(props: { title: string; desc?: string; children: import('solid-
 
 export default function Developers() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // 进入页面即预热音源（与指南页一致）
   onMount(() => {
@@ -269,7 +275,17 @@ export default function Developers() {
         </div>
 
         <div class="py-8 text-center">
-          <Button size="lg" class="gap-2" onClick={() => navigate({ to: '/workbench' })}>
+          <Button
+            size="lg"
+            class="gap-2"
+            onClick={() =>
+              navigateWithTransition(
+                () => navigate({ to: '/workbench' }),
+                location().pathname,
+                '/workbench',
+              )
+            }
+          >
             {t('dev.cta')}
             <Icon icon="lucide:arrow-right" />
           </Button>

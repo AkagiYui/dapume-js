@@ -46,6 +46,10 @@ export interface DapumeEvent {
   startTime: number;
   /** 持续时长（毫秒）。 */
   duration: number;
+  /** 从乐谱开头累计的精确起始拍；不受 BPM 与毫秒取整影响。 */
+  startBeat: number;
+  /** 精确持续拍数；不受 BPM 与毫秒取整影响。 */
+  durationBeats: number;
   /** 源字符起始下标（含）。 */
   srcStart: number;
   /** 源字符结束下标（不含）。 */
@@ -68,6 +72,10 @@ export interface DapumeNote {
   startTime: number;
   /** 持续时长（毫秒）。 */
   duration: number;
+  /** 从乐谱开头累计的精确起始拍；不受 BPM 与毫秒取整影响。 */
+  startBeat: number;
+  /** 精确持续拍数；不受 BPM 与毫秒取整影响。 */
+  durationBeats: number;
   /** 在源文本中触发该音符的起始字符下标（含）。 */
   srcStart: number;
   /** 在源文本中触发该音符的结束字符下标（不含）。 */
@@ -82,6 +90,8 @@ export interface DapumeNote {
 export interface DapumeSection {
   /** 该段起始时刻（毫秒）。 */
   startTime: number;
+  /** 该段从乐谱开头累计的精确起始拍。 */
+  startBeat: number;
   /** 主音音高（MIDI，中央 C = 60）。 */
   tonic: number;
   /** 速度（每分钟拍数）。 */
@@ -104,6 +114,8 @@ export interface DapumeScore {
   trackCount: number;
   /** 乐谱总时长（毫秒），即最后一个音符的结束时刻。 */
   durationMs: number;
+  /** 乐谱总拍数（精确拍位，不受 BPM 与毫秒取整影响）。 */
+  durationBeats: number;
   /** 各参数段（调号/速度随时间的变化），按开始时刻升序。 */
   sections: DapumeSection[];
 }

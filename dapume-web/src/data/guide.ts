@@ -16,6 +16,10 @@ export interface GuideExample {
   caption: L10n;
 }
 
+export type GuideFlowBlock =
+  | { type: 'text'; text: L10n }
+  | { type: 'example'; example: GuideExample };
+
 export interface RefTable {
   headers: Record<Locale, string[]>;
   /** rows[r][c] 为一个本地化单元格。 */
@@ -28,6 +32,8 @@ export interface GuideSection {
   paragraphs: Record<Locale, string[]>;
   table?: RefTable;
   examples: GuideExample[];
+  /** 教程可用的交错内容流：讲解一小段，紧接一个可播放示例。 */
+  flow?: GuideFlowBlock[];
 }
 
 export const GUIDE_SECTIONS: GuideSection[] = [
