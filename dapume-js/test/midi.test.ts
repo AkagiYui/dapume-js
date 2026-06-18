@@ -98,15 +98,18 @@ describe('MIDI 结构', () => {
     expect(m.ntracks).toBe(3); // 指挥轨 + 两个声部
   });
 
-  it('复音音轨（和弦/同时音）编出等量 note_on/note_off 且 delta 非负', () => {
-    // [1] 三和弦与旋律 1234 复音叠在同一音轨（→ MIDI 轨 1）
+  it('旋律与和弦分别编入独立 MTrk，note_on/note_off 数量正确', () => {
     const m = parseMidi(render('1=C 120bpm\n[1]1234'));
-    const tr = m.tracks[1]!;
-    const ons = tr.events.filter((e) => e.type === 'ch:90').length;
-    const offs = tr.events.filter((e) => e.type === 'ch:80').length;
-    expect(ons).toBe(7); // 和弦 3 音 + 旋律 4 音
-    expect(offs).toBe(7);
-    for (const e of tr.events) expect(e.delta).toBeGreaterThanOrEqual(0);
+    expect(m.ntracks).toBe(3); // 指挥轨 + 旋律轨 + 和弦轨
+    const melody = m.tracks[1]!;
+    const chords = m.tracks[2]!;
+    expect(melody.events.filter((e) => e.type === 'ch:90')).toHaveLength(4);
+    expect(melody.events.filter((e) => e.type === 'ch:80')).toHaveLength(4);
+    expect(chords.events.filter((e) => e.type === 'ch:90')).toHaveLength(3);
+    expect(chords.events.filter((e) => e.type === 'ch:80')).toHaveLength(3);
+    for (const track of [melody, chords]) {
+      for (const event of track.events) expect(event.delta).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it('每条轨道以 end_of_track 结尾', () => {

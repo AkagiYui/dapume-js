@@ -297,7 +297,12 @@ html.standalone:not(.editor-page) body {
 
 /* 播放时当前发声的整行高亮（对比度低于音符字符高亮） */
 .cm-playing-line {
-  background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+  background-color: color-mix(in oklch, var(--primary) 12%, transparent) !important;
+}
+
+/* 光标选中行同时也是播放行时，以更深的蓝色表达两个状态，不让灰色选中态盖住播放态。 */
+.cm-activeLine.cm-playing-line {
+  background-color: color-mix(in oklch, var(--primary) 20%, transparent) !important;
 }
 
 /* 播放时当前发声的音符/和弦字符高亮 */

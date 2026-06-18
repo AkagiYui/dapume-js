@@ -5,12 +5,14 @@
  * 支持播放指针、跟随播放自动滚动、当前发声音符高亮，以及滚轮平移/缩放。
  */
 import { createEffect, onCleanup, onMount } from 'solid-js';
-import type { DapumeNote } from 'dapume-js';
+import type { DapumeNote, DapumeSection } from 'dapume-js';
 import { clamp } from '~/lib/utils';
+import { BEATS_PER_MEASURE, beatAtTime, measureAtTime, timeAtBeat } from '~/lib/measures';
 import { isDark, themeColor } from '~/stores/settings';
 
 export interface PianoRollProps {
   notes: DapumeNote[];
+  sections: DapumeSection[];
   durationMs: number;
   currentTimeMs: number;
   isPlaying: boolean;
@@ -41,8 +43,8 @@ export interface PianoRollProps {
 const KEYBOARD_W = 68;
 /** 黑键的音级（半音）。 */
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
-/** 白键的音级（半音）。 */
-const WHITE_KEYS = new Set([0, 2, 4, 5, 7, 9, 11]);
+/** 卷帘至少展示三个完整八度。 */
+const MIN_VISIBLE_SEMITONES = 36;
 
 function isBlackKey(pitch: number): boolean {
   return BLACK_KEYS.has(((pitch % 12) + 12) % 12);
@@ -95,19 +97,41 @@ export function PianoRoll(props: PianoRollProps) {
 
   /** 计算可见音高范围。 */
   function pitchRange(): { lo: number; hi: number } {
-    if (props.notes.length === 0) return { lo: 48, hi: 84 };
+    if (props.notes.length === 0) return { lo: 48, hi: 83 };
     let lo = 127;
     let hi = 0;
     for (const n of props.notes) {
       if (n.pitch < lo) lo = n.pitch;
       if (n.pitch > hi) hi = n.pitch;
     }
-    lo = Math.max(0, lo - 2);
-    hi = Math.min(127, hi + 2);
-    // 实体键盘的可见范围必须落在白键边缘，避免首尾只露出半个黑键。
-    while (lo > 0 && !WHITE_KEYS.has(lo % 12)) lo--;
-    while (hi < 127 && !WHITE_KEYS.has(hi % 12)) hi++;
-    return { lo, hi };
+    const paddedSpan = hi - lo + 5;
+    let rangeLo: number;
+    let rangeHi: number;
+    if (paddedSpan > MIN_VISIBLE_SEMITONES) {
+      rangeLo = Math.floor((lo - 2) / 12) * 12;
+      rangeHi = Math.ceil((hi + 3) / 12) * 12 - 1;
+    } else {
+      const center = (lo + hi) / 2;
+      rangeLo = Math.floor((center - (MIN_VISIBLE_SEMITONES - 1) / 2) / 12) * 12;
+      rangeHi = rangeLo + MIN_VISIBLE_SEMITONES - 1;
+      while (lo - 2 < rangeLo) {
+        rangeLo -= 12;
+        rangeHi -= 12;
+      }
+      while (hi + 2 > rangeHi) {
+        rangeLo += 12;
+        rangeHi += 12;
+      }
+    }
+    if (rangeLo < 0) {
+      rangeHi -= rangeLo;
+      rangeLo = 0;
+    }
+    if (rangeHi > 127) {
+      rangeLo -= rangeHi - 127;
+      rangeHi = 127;
+    }
+    return { lo: Math.max(0, rangeLo), hi: Math.min(127, rangeHi) };
   }
 
   function draw() {
@@ -134,24 +158,13 @@ export function PianoRoll(props: PianoRollProps) {
     const { lo, hi } = pitchRange();
     const timeAxisLen = vertical ? cssH : cssW; // 时间轴总长（含键盘）
     const pitchAxisLen = vertical ? cssW : cssH; // 音高轴总长
-    // 真实钢琴以白键等宽排列，黑键叠在相邻白键的缝上；不能把 12 个半音画成 12 个等宽格。
-    const whitePitches: number[] = [];
-    for (let p = lo; p <= hi; p++) if (!isBlackKey(p)) whitePitches.push(p);
-    const whiteIndex = new Map(whitePitches.map((p, i) => [p, i]));
-    const whiteCell = pitchAxisLen / Math.max(1, whitePitches.length);
+    // 卷帘按十二平均律等分：黑键与白键的音符瀑布使用完全相同的宽度。
+    const rows = hi - lo + 1;
+    const cell = pitchAxisLen / Math.max(1, rows);
     const pitchRect = (pitch: number): { start: number; length: number } => {
-      if (!isBlackKey(pitch)) {
-        const index = whiteIndex.get(pitch) ?? 0;
-        const start = highAtCoord0
-          ? pitchAxisLen - (index + 1) * whiteCell
-          : index * whiteCell;
-        return { start, length: whiteCell };
-      }
-      const previousWhite = whiteIndex.get(pitch - 1) ?? 0;
-      const boundary = (previousWhite + 1) * whiteCell;
-      const center = highAtCoord0 ? pitchAxisLen - boundary : boundary;
-      const length = whiteCell * 0.61;
-      return { start: center - length / 2, length };
+      const index = pitch - lo;
+      const start = highAtCoord0 ? pitchAxisLen - (index + 1) * cell : index * cell;
+      return { start, length: cell };
     };
     const noteAreaTime = timeAxisLen - KEYBOARD_W; // 时间轴上音符区长度
 
@@ -217,19 +230,22 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
-    // 时间网格（每秒一条）
+    // 小节网格：当前版本固定 4/4，跨速度段时仍按累计拍数准确换算。
     ctx.strokeStyle = `color-mix(in oklch, ${border} 70%, transparent)`;
     ctx.lineWidth = 1;
     ctx.font = '10px ui-sans-serif, system-ui';
     ctx.fillStyle = mutedFg;
-    const startSec = Math.floor(scrollX / 1000);
-    const endSec = Math.ceil((scrollX + visibleMs) / 1000);
-    for (let s = startSec; s <= endSec; s++) {
-      const tc = tPos(s * 1000);
+    const startMeasure = Math.floor(beatAtTime(scrollX, props.sections) / BEATS_PER_MEASURE);
+    const endMeasure = Math.ceil(
+      beatAtTime(scrollX + visibleMs, props.sections) / BEATS_PER_MEASURE,
+    );
+    for (let measure = startMeasure; measure <= endMeasure; measure++) {
+      const tc = tPos(timeAtBeat(measure * BEATS_PER_MEASURE, props.sections));
       if (tc < naLo || tc > naHi) continue;
       lineAcrossPitch(tc);
-      if (vertical) ctx.fillText(`${s}s`, 2, tc + 11);
-      else ctx.fillText(`${s}s`, tc + 3, 11);
+      const label = `M${measure + 1}`;
+      if (vertical) ctx.fillText(label, 2, tc + 11);
+      else ctx.fillText(label, tc + 3, 11);
     }
 
     // 音符（裁剪到音符区 [naLo, naHi]；时间方向可能反向，故取两端的 min/max）
@@ -272,17 +288,17 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
-    // 键盘参考真实钢琴：白键等宽、黑键跨在白键缝上，按 2+3 循环排列。
-    // 黑键长度约为白键的 62%，宽度约为白键的 61%，并带一层轻微的顶面倒角。
-    ctx.fillStyle = '#111214';
+    // 扁平键盘：每个半音与卷帘等宽；黑键只在时间轴方向缩短，不再绘制拟物倒角。
+    ctx.fillStyle = bg;
     fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
     const blackKeyLen = keyBodyLen * 0.62;
     const blackKeyStart = kbAtStart ? keyBodyStart + keyBodyLen - blackKeyLen : keyBodyStart;
-    const whiteFill = '#fbfaf7';
-    const whiteBorder = '#aaa9a5';
+    const whiteFill = bg;
+    const whiteBorder = border;
 
-    // 先画全部白键，边缘略带暖色，像真实象牙/树脂键面。
-    for (const p of whitePitches) {
+    // 白键铺满键盘深度，使用产品现有背景与边框 token。
+    for (let p = lo; p <= hi; p++) {
+      if (isBlackKey(p)) continue;
       const lane = pitchRect(p);
       const pressFill = activePitchColor.get(p);
       const pressed = pressFill !== undefined;
@@ -311,17 +327,14 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
-    // 黑键最后叠放，位置正好骑在相邻白键分界线上。
+    // 黑键保持纯色平面；音高轴宽度与白键、瀑布音符完全一致。
     for (let p = lo; p <= hi; p++) {
       if (!isBlackKey(p)) continue;
       const lane = pitchRect(p);
       const pressFill = activePitchColor.get(p);
-      ctx.fillStyle = pressFill ?? '#141517';
+      ctx.fillStyle = pressFill ?? fg;
       fillRect(blackKeyStart, blackKeyLen, lane.start, lane.length);
-      ctx.fillStyle = pressFill ?? '#292b2e';
-      const faceStart = kbAtStart ? blackKeyStart + blackKeyLen * 0.08 : blackKeyStart;
-      fillRect(faceStart, blackKeyLen * 0.86, lane.start + 1, Math.max(1, lane.length - 2));
-      ctx.strokeStyle = '#050506';
+      ctx.strokeStyle = border;
       ctx.lineWidth = 1;
       strokeRect(blackKeyStart + 0.5, blackKeyLen - 1, lane.start + 0.5, lane.length - 1);
     }
@@ -437,6 +450,24 @@ export function PianoRoll(props: PianoRollProps) {
     }
   }
 
+  /** 键盘操作与原生 slider 一致：方向键逐拍，Home/End 到首尾。 */
+  function onKeyDown(e: KeyboardEvent) {
+    let target: number | null = null;
+    const currentBeat = beatAtTime(props.currentTimeMs, props.sections);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      target = timeAtBeat(Math.max(0, currentBeat - 1), props.sections);
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      target = timeAtBeat(currentBeat + 1, props.sections);
+    } else if (e.key === 'Home') {
+      target = 0;
+    } else if (e.key === 'End') {
+      target = props.durationMs;
+    }
+    if (target === null || !props.onSeek) return;
+    e.preventDefault();
+    props.onSeek(clamp(target, 0, props.durationMs));
+  }
+
   onMount(() => {
     const ro = new ResizeObserver(() => resize());
     ro.observe(containerEl);
@@ -467,11 +498,14 @@ export function PianoRoll(props: PianoRollProps) {
         ref={canvasEl}
         class="block touch-none cursor-crosshair"
         role="slider"
+        tabIndex={0}
         aria-label="Piano roll playback position"
         aria-valuemin={0}
         aria-valuemax={props.durationMs}
         aria-valuenow={Math.round(props.currentTimeMs)}
+        aria-valuetext={`M${measureAtTime(props.currentTimeMs, props.sections)}`}
         onWheel={onWheel}
+        onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

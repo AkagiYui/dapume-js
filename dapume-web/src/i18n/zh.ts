@@ -141,6 +141,8 @@ export const zh = {
     pianoCenter: '编辑器与卷帘并排（左右布局）',
     prevNote: '上一个音符',
     nextNote: '下一个音符',
+    prevLine: '上一行',
+    nextLine: '下一行',
     delayDown: '减少视觉延迟',
     delayUp: '增加视觉延迟',
     visualDelay: '视觉延迟（适配无线耳机）',

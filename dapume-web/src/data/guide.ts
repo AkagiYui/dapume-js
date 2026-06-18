@@ -135,7 +135,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     },
     examples: [
       {
-        code: '1=C 100bpm // C 大调\n1234       // 第一乐句\n// 换气\n5432',
+        code: '1=C 100bpm  // C 大调\n1234  // 第一乐句\n// 换气\n5432',
         caption: L('注释不会改变演奏结果', 'Comments do not change playback'),
       },
     ],

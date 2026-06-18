@@ -32,6 +32,7 @@ import { EXAMPLES } from '~/data/examples';
 import { renameScore, saveScoreContent, setLastScoreId } from '~/stores/scores';
 import type { ScoreDoc } from '~/stores/scores';
 import { downloadBytes, downloadText } from '~/lib/download';
+import { measureAtTime } from '~/lib/measures';
 import { t } from '~/i18n';
 import { locale } from '~/stores/settings';
 import {
@@ -305,6 +306,18 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     [...new Set(lineEntries().map((entry) => entry.time))].sort((a, b) => a - b),
   );
 
+  /** 左侧 gutter 的自动小节号：同一 4/4 小节跨多行时，只标记第一条音乐行。 */
+  const measureNumbers = createMemo(() => {
+    const labels: (number | null)[] = Array(scoreText().split('\n').length + 1).fill(null);
+    let previousMeasure = -1;
+    for (const entry of lineEntries()) {
+      const measure = measureAtTime(entry.time, score().sections);
+      if (measure !== previousMeasure) labels[entry.line] = measure;
+      previousMeasure = measure;
+    }
+    return labels;
+  });
+
   function seekNext(times: number[]) {
     const t = times.find((x) => x > currentTimeMs() + 1);
     if (t !== undefined) jumpTo(t);
@@ -351,7 +364,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         el.getAttribute('role') === 'slider')
     )
       return;
-    if (el?.isContentEditable && (!playActive() || e.code === 'Space')) return;
+    if (el?.isContentEditable) return;
     if (e.code === 'Space') {
       if (score().notes.length === 0) return;
       e.preventDefault();
@@ -400,8 +413,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
    * 窄屏空间紧张时，实时调号/速度可被截断，音符/音轨数始终可见（靠右、不撑破顶栏）。 */
   const ScoreStats = (p: { class?: string }) => (
     <div class={`flex items-center gap-2 text-xs text-muted-foreground ${p.class ?? ''}`}>
-      {/* 播放或暂停（playActive）时编辑都已锁定，故都显示小锁 */}
-      <Show when={playActive()}>
+      {/* 只有实际播放期间锁定编辑；暂停或点击定位后仍可直接修改。 */}
+      <Show when={isPlaying()}>
         <InfoTip label={t('workbench.playingLocked')} class="shrink-0 text-amber-500">
           <Icon icon="lucide:lock" />
         </InfoTip>
@@ -431,16 +444,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
-  /** 编辑器本体（不含标题栏）。播放与暂停时均锁定编辑并保留高亮。 */
+  /** 编辑器本体（不含标题栏）。仅实际播放时锁定；暂停或定位后可直接继续编辑。 */
   const EditorBody = () => (
     <CodeEditor
       value={scoreText()}
       onChange={setScoreText}
-      readOnly={playActive()}
+      readOnly={isPlaying()}
       highlights={highlights()}
       keepVisible={keepLine() && playActive()}
       smoothScroll={smooth()}
       sticky={sticky()}
+      measureNumbers={measureNumbers()}
       onLineClick={seekToLine}
       placeholder={'1=C 120bpm\n1234567'}
     />
@@ -464,7 +478,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   );
 
   /** 紧凑播放控制（放在乐谱编辑器顶栏中间，单行、不撑高顶栏）：
-   * 上一个音符 / 播放暂停 / 停止 / 下一个音符 + 进度条（大屏附时间）。 */
+   * 上一行 / 播放暂停 / 停止 / 下一行 + 进度条（大屏附时间）。 */
   const CompactPlayback = () => {
     const noNotes = () => score().notes.length === 0;
     const stepDisabled = () => score().events.length === 0;
@@ -474,9 +488,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           size="icon"
           variant="ghost"
           class="size-7"
-          onClick={seekToPrevNote}
+          onClick={seekToPrevLine}
           disabled={stepDisabled()}
-          aria-label={t('workbench.prevNote')}
+          aria-label={t('workbench.prevLine')}
         >
           <Icon icon="lucide:step-back" />
         </Button>
@@ -502,9 +516,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           size="icon"
           variant="ghost"
           class="size-7"
-          onClick={seekToNextNote}
+          onClick={seekToNextLine}
           disabled={stepDisabled()}
-          aria-label={t('workbench.nextNote')}
+          aria-label={t('workbench.nextLine')}
         >
           <Icon icon="lucide:step-forward" />
         </Button>
@@ -735,6 +749,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     >
       <PianoRoll
         notes={score().notes}
+        sections={score().sections}
         durationMs={score().durationMs}
         currentTimeMs={visualTimeMs()}
         isPlaying={isPlaying()}
@@ -908,9 +923,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           size="icon"
           variant="ghost"
           class="size-8 shrink-0"
-          onClick={seekToPrevNote}
+          onClick={seekToPrevLine}
           disabled={stepDisabled()}
-          aria-label={t('workbench.prevNote')}
+          aria-label={t('workbench.prevLine')}
         >
           <Icon icon="lucide:step-back" />
         </Button>
@@ -927,9 +942,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           size="icon"
           variant="ghost"
           class="size-8 shrink-0"
-          onClick={seekToNextNote}
+          onClick={seekToNextLine}
           disabled={stepDisabled()}
-          aria-label={t('workbench.nextNote')}
+          aria-label={t('workbench.nextLine')}
         >
           <Icon icon="lucide:step-forward" />
         </Button>

@@ -145,6 +145,8 @@ export const en: typeof zh = {
     pianoCenter: 'Editor & roll side-by-side',
     prevNote: 'Previous note',
     nextNote: 'Next note',
+    prevLine: 'Previous line',
+    nextLine: 'Next line',
     delayDown: 'Decrease visual delay',
     delayUp: 'Increase visual delay',
     visualDelay: 'Visual delay (for wireless earbuds)',

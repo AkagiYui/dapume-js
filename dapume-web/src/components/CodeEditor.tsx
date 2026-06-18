@@ -239,6 +239,16 @@ function scrollLineToAnchor(v: EditorView, pos: number, smooth: boolean): void {
 
 const editableComp = new Compartment();
 
+/** 行号前显示当前行开始的小节；同一小节的后续行只保留普通行号。 */
+function measureLineNumbers(measures: readonly (number | null)[]) {
+  return lineNumbers({
+    formatNumber(lineNumber) {
+      const measure = measures[lineNumber] ?? null;
+      return measure === null ? `· ${lineNumber}` : `M${measure} · ${lineNumber}`;
+    },
+  });
+}
+
 export interface CodeEditorProps {
   value: string;
   onChange?: (v: string) => void;
@@ -250,6 +260,8 @@ export interface CodeEditorProps {
   smoothScroll?: boolean;
   /** 是否启用「参数行粘性置顶」。 */
   sticky?: boolean;
+  /** 1-based 行号对应的小节编号；同一小节只在第一条音乐行提供编号。 */
+  measureNumbers?: readonly (number | null)[];
   /** 点击某一行时通知上层，用于把播放进度定位到该行行首。 */
   onLineClick?: (lineNumber: number) => void;
   placeholder?: string;
@@ -258,6 +270,7 @@ export interface CodeEditorProps {
 export function CodeEditor(props: CodeEditorProps) {
   let host!: HTMLDivElement;
   let view: EditorView | undefined;
+  const lineNumberComp = new Compartment();
   let lastScrolledLine = -1; // keepLine：上次已锚定的演奏行号（仅换行时再滚动）
 
   onMount(() => {
@@ -266,7 +279,7 @@ export function CodeEditor(props: CodeEditorProps) {
       state: EditorState.create({
         doc: props.value,
         extensions: [
-          lineNumbers(),
+          lineNumberComp.of(measureLineNumbers(props.measureNumbers ?? [])),
           history(),
           drawSelection(),
           highlightActiveLine(),
@@ -291,7 +304,7 @@ export function CodeEditor(props: CodeEditorProps) {
               if (event.button !== 0 || !props.onLineClick) return false;
               const pos = editor.posAtCoords({ x: event.clientX, y: event.clientY });
               if (pos !== null) props.onLineClick(editor.state.doc.lineAt(pos).number);
-              // 不阻止 CodeMirror 自身的光标/选区行为，停止态仍可正常编辑。
+              // 不阻止 CodeMirror 自身的光标/选区行为：定位进度与放置编辑光标同时完成。
               return false;
             },
           }),
@@ -317,6 +330,12 @@ export function CodeEditor(props: CodeEditorProps) {
         EditorView.editable.of(!ro),
       ]),
     });
+  });
+
+  // 乐谱变化后刷新“小节号 · 行号” gutter；小节编号由解析后的事件时间自动推导。
+  createEffect(() => {
+    const measures = props.measureNumbers ?? [];
+    view?.dispatch({ effects: lineNumberComp.reconfigure(measureLineNumbers(measures)) });
   });
 
   // 粘性参数行开关：插件常驻，仅切换状态字段（含初始值，故不 defer）

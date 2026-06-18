@@ -13,19 +13,30 @@ function chordPitches(name: string): number[] {
 }
 
 describe('和弦', () => {
-  it('伴奏和弦：[1]1234[5]567 与旋律同轨（同时音），自动持续到下一个和弦', () => {
+  it('伴奏和弦：[1]1234[5]567 使用独立和弦音轨，并自动持续到下一个和弦', () => {
     const score = parse('1=C 120bpm\n[1]1234[5]567');
-    // 同时音（和弦）并入同一音轨
-    expect(score.trackCount).toBe(1);
-    const t0 = score.tracks[0]!;
+    expect(score.trackCount).toBe(2);
+    const melody = score.tracks[0]!;
+    const chords = score.tracks[1]!;
     const has = (p: number, st: number, d: number) =>
-      t0.some((n) => n.pitch === p && n.startTime === st && n.duration === d);
+      chords.some((n) => n.pitch === p && n.startTime === st && n.duration === d);
     // 主旋律仍在
-    for (const p of [60, 62, 64, 65, 67, 69, 71]) expect(t0.some((n) => n.pitch === p)).toBe(true);
+    for (const p of [60, 62, 64, 65, 67, 69, 71]) expect(melody.some((n) => n.pitch === p)).toBe(true);
+    expect(melody.every((n) => !n.isChord)).toBe(true);
+    expect(chords.every((n) => n.isChord)).toBe(true);
     // [1] = C 大三和弦（低八度）48/52/55，持续 2 拍(1000ms)
     for (const p of [48, 52, 55]) expect(has(p, 0, 1000)).toBe(true);
     // [5] = G 大三和弦 55/59/62，持续 1.5 拍(750ms)，从 1000ms 起
     for (const p of [55, 59, 62]) expect(has(p, 1000, 750)).toBe(true);
+  });
+
+  it('普通行、括号声部中的所有方括号和弦都汇入同一条和弦音轨', () => {
+    const score = parse('1=C 120bpm\n[1]1234\n(567[5])');
+    expect(score.trackCount).toBe(3);
+    expect(score.tracks[0]!.every((n) => !n.isChord)).toBe(true);
+    expect(score.tracks[1]!.every((n) => !n.isChord)).toBe(true);
+    expect(score.tracks[2]!.length).toBe(6);
+    expect(score.tracks[2]!.every((n) => n.isChord)).toBe(true);
   });
 
   it('一级大三和弦 [1]', () => {
@@ -58,8 +69,8 @@ describe('和弦', () => {
 
   it('源位置覆盖整个和弦记号', () => {
     const score = parse('1=C\n[4M7]2');
-    // 行 1 偏移 4；'[4M7]' 占 [4,9)。和弦与旋律同轨，取首个和弦音校验
-    const chordNote = score.tracks[0]!.find((n) => n.isChord)!;
+    // 行 1 偏移 4；'[4M7]' 占 [4,9)。取独立和弦音轨中的首个音校验
+    const chordNote = score.tracks[1]!.find((n) => n.isChord)!;
     expect(chordNote.isChord).toBe(true);
     expect(chordNote.srcStart).toBe(4);
     expect(chordNote.srcEnd).toBe(9);

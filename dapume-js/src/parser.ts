@@ -5,7 +5,7 @@
  * 追踪（srcStart/srcEnd）以便上层做播放高亮。音高、时值、调号、速度、休止符等听感与原版一致。
  *
  * 音轨语义（round-23 起，换行符敏感，不再追求与 dapume-py 的音轨编排一致）：
- * - 行内的「同时音」——括号 `(...)` 与和弦 `[...]`——都作为复音叠加在同一音轨（右对齐到主光标）。
+ * - 行内括号 `(...)` 作为复音叠加在当前旋律音轨；所有方括号和弦 `[...]` 汇入同一条独立的和弦音轨。
  * - 「多轨谱（双手谱）」：当**一整行**被一对括号包围时，该行作为一条新音轨，与上一条普通行同起点；
  *   普通行依次推进主轨光标。例如四行 `1111111` / `(2222222)` / `3333333` / `(4444444)`：
  *   主轨为 1111111 接 3333333，第二轨为 2222222、4444444 分别与之并行。
@@ -32,6 +32,9 @@ import type {
   ScoreParameters,
 } from './types';
 
+/** 解析中暂存和弦音轨的哨兵；整谱解析结束后统一映射到最后一条真实音轨。 */
+const CHORD_TRACK = -1;
+
 /** Python 风格取模（结果与除数同号），用于调号字母换算。 */
 function pymod(a: number, b: number): number {
   return ((a % b) + b) % b;
@@ -47,8 +50,8 @@ function identityIndices(s: string): number[] {
 /**
  * 解析一「行」线性乐谱为相对音符列表（均属同一音轨 trackNo=0）。
  *
- * 行内的「同时音」——括号 `(...)` 与和弦 `[...]`——都作为复音叠加在同一音轨上
- * （右对齐到当前主光标）。多轨（双手谱）由 {@link parse} 在「整行被括号包围」时分配新音轨。
+ * 行内括号 `(...)` 作为复音叠加在当前音轨；方括号和弦 `[...]` 标记为独立的和弦音轨，
+ * 二者都右对齐到当前主光标。多轨（双手谱）由 {@link parse} 在整行括号时分配。
  *
  * @param score 待解析的文本（通常是去掉换行后的单行内容）。
  * @param src   与 `score` 等长的数组，`src[i]` 为 `score[i]` 在原始源文本中的下标。
@@ -83,12 +86,12 @@ export function parseNoteLineRelative(
     }
   }
 
-  /** 终止当前和弦：生成和弦音，作为「同时音」叠加在同一音轨（trackNo=0）。 */
+  /** 终止当前和弦：生成和弦音，并暂存到全谱共用的和弦音轨。 */
   function endChord(): void {
     if (chordName === '') return;
     const chordNoteValue = mainBeat - chordStartBeat;
     const chordNotes = chordFromScore(chordName, chordStartBeat, chordNoteValue, chordStartSrc, chordEndSrc);
-    for (const note of chordNotes) note.trackNo = 0;
+    for (const note of chordNotes) note.trackNo = CHORD_TRACK;
     relativeNotes.push(...chordNotes);
     chordName = '';
   }
@@ -127,9 +130,9 @@ export function parseNoteLineRelative(
         if (bracketNotes.length > 0) {
           const lastBN = bracketNotes[bracketNotes.length - 1]!;
           const bracketTotalValue = lastBN.startBeat + lastBN.noteValue;
-          // 行内括号 = 同时音：叠加在同一音轨（trackNo=0），右对齐到当前主光标
+          // 行内括号 = 同时音：普通音叠加到当前音轨；其中的方括号和弦仍保留独立轨标记。
           for (const note of bracketNotes) {
-            note.trackNo = 0;
+            if (!note.isChord) note.trackNo = 0;
             note.startBeat = mainBeat - bracketTotalValue + note.startBeat;
             relativeNotes.push(note);
           }
@@ -309,7 +312,7 @@ export function parse(text: string): DapumeScore {
   // 逐行解析（换行符敏感）：
   //  - 普通行 → 主轨(track 0)，依次推进主光标；
   //  - 整行被括号包围 → 新音轨（双手谱的另一只手），与上一条普通行同起点；
-  //  - 行内 (...)/[...] = 同时音，仍叠加在本行所属音轨（见 parseNoteLineRelative）。
+  //  - 行内 (...) = 当前旋律音轨上的同时音；[...] = 全谱共用的独立和弦音轨。
   // 连续的非参数行属于同一「块」（同段速度/调号），遇参数行或文末时结算为绝对时间。
   const allEvents: DapumeEvent[] = [];
   const sections: DapumeSection[] = [];
@@ -365,7 +368,7 @@ export function parse(text: string): DapumeScore {
       bracketIdx += 1;
       const { notes: rel } = parseNoteLineRelative(fb.inner, fb.innerSrc, lineStartBeat);
       for (const n of rel) {
-        n.trackNo = bracketIdx;
+        if (!n.isChord) n.trackNo = bracketIdx;
         blockRel.push(n);
       }
     } else {
@@ -380,6 +383,17 @@ export function parse(text: string): DapumeScore {
     }
   }
   flushBlock();
+
+  // 所有方括号和弦共用最后一条“和弦音轨”，与主旋律及整行括号声部分离。
+  let regularTrackCount = 0;
+  let hasChordTrack = false;
+  for (const event of allEvents) {
+    if (event.isChord) hasChordTrack = true;
+    else regularTrackCount = Math.max(regularTrackCount, event.trackNo + 1);
+  }
+  if (hasChordTrack) {
+    for (const event of allEvents) if (event.isChord) event.trackNo = regularTrackCount;
+  }
 
   // 可发声音符进入 notes/tracks；休止符只保留在 events 中供高亮与导航。
   const valid = allEvents.filter(
