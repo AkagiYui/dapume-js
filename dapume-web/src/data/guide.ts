@@ -7,7 +7,7 @@ import type { Locale } from '~/stores/settings';
 export type L10n = Record<Locale, string>;
 
 /** 构造本地化字符串；省略 en 时中英相同（用于语言无关的记号）。 */
-function L(zh: string, en?: string): L10n {
+export function L(zh: string, en?: string): L10n {
   return { zh, en: en ?? zh };
 }
 
@@ -121,23 +121,44 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
   },
   {
-    id: 'multitrack',
-    title: L('多轨演奏', 'Multi-track'),
+    id: 'simul',
+    title: L('同时音', 'Simultaneous notes'),
     paragraphs: {
       zh: [
-        '在音符后用圆括号 () 写入其它音符，表示多轨同时演奏；多轨时值与主轨右对齐。',
-        '两条以上轨道写作 1-(3-)(5-)，并支持嵌套，例如 1+(3+(5+))。',
+        '在同一行里，用圆括号 () 把若干音符括起来，表示它们与括号前的旋律「同时」发声，叠加在同一条音轨上。',
+        '括号内的总时值会右对齐到前面那段旋律的末尾，因此很适合写「柱式和声」「双音」等同时落下的音。括号可嵌套。',
       ],
       en: [
-        'Put more notes in parentheses () after a note to play tracks simultaneously; their durations right-align to the main track.',
-        'Three or more tracks: 1-(3-)(5-), and nesting is supported, e.g. 1+(3+(5+)).',
+        'Within one line, wrap notes in parentheses () so they sound together with the melody before them, stacked on the same track.',
+        'Their total duration right-aligns to the end of the preceding melody — handy for block chords or double stops. Parentheses can nest.',
       ],
     },
     examples: [
-      { code: '1=C 100bpm\n1-3-(5-)', caption: L('3 与 5 同时演奏', '3 and 5 sound together') },
+      { code: '1=C 100bpm\n1(3)(5)', caption: L('do、mi、sol 三音同时（一个柱式和声）', 'do, mi, sol together (a block chord)') },
+      { code: '1=C 100bpm\n13(5)', caption: L('do re 之后，sol 与旋律同时落下', 'after do-re, sol lands together with the melody') },
+    ],
+  },
+  {
+    id: 'multitrack',
+    title: L('多轨谱（双手谱）', 'Multi-track (two-hand)'),
+    paragraphs: {
+      zh: [
+        '当「一整行」被一对圆括号完整包围时，这一行会成为一条新的音轨，与它上面那条普通行同时开始——就像钢琴的左右手分谱。',
+        '普通行依次构成主旋律（右手），其下方的整行括号行作为伴奏（左手）与之并行。注意区分：行内的 (...) 是同时音，整行的 (...) 才是新音轨。',
+      ],
+      en: [
+        'When an entire line is wrapped in a pair of parentheses, it becomes a new track that starts together with the normal line above it — like a piano’s left and right hands.',
+        'Normal lines form the melody (right hand); a fully-bracketed line below plays as accompaniment (left hand) in parallel. Note: inline (...) is simultaneous notes, a whole-line (...) is a new track.',
+      ],
+    },
+    examples: [
       {
-        code: '1=D 100bpm\n5-345-34(1+(3+(5+)))',
-        caption: L('旋律 + 三层和声（卡农片段）', 'Melody + 3-layer harmony (Canon excerpt)'),
+        code: '1=C 120bpm\n1111111\n(2222222)\n3333333\n(4444444)',
+        caption: L('两条音轨：1/3 行为主旋律，2/4 行与之并行', 'Two tracks: lines 1/3 melody, lines 2/4 in parallel'),
+      },
+      {
+        code: '1=C 90bpm\n13531353\n(1,5,1,5,1,5,1,5,)',
+        caption: L('右手旋律 + 左手低音伴奏', 'Right-hand melody + left-hand bass'),
       },
     ],
   },

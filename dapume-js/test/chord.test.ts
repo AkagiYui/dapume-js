@@ -13,18 +13,19 @@ function chordPitches(name: string): number[] {
 }
 
 describe('和弦', () => {
-  it('伴奏和弦：[1]1234[5]567 自动持续到下一个和弦', () => {
+  it('伴奏和弦：[1]1234[5]567 与旋律同轨（同时音），自动持续到下一个和弦', () => {
     const score = parse('1=C 120bpm\n[1]1234[5]567');
-    expect(score.trackCount).toBe(4);
-    // 主旋律
-    expect(score.tracks[0]!.map((n) => n.pitch)).toEqual([60, 62, 64, 65, 67, 69, 71]);
-    // [1] = C 大三和弦（低八度），持续 2 拍(1000ms)；之后 [5] = G 大三和弦，持续 1.5 拍(750ms)
-    expect(score.tracks[1]).toEqual([
-      expect.objectContaining({ pitch: 48, startTime: 0, duration: 1000 }),
-      expect.objectContaining({ pitch: 55, startTime: 1000, duration: 750 }),
-    ]);
-    expect(score.tracks[2]!.map((n) => n.pitch)).toEqual([52, 59]);
-    expect(score.tracks[3]!.map((n) => n.pitch)).toEqual([55, 62]);
+    // 同时音（和弦）并入同一音轨
+    expect(score.trackCount).toBe(1);
+    const t0 = score.tracks[0]!;
+    const has = (p: number, st: number, d: number) =>
+      t0.some((n) => n.pitch === p && n.startTime === st && n.duration === d);
+    // 主旋律仍在
+    for (const p of [60, 62, 64, 65, 67, 69, 71]) expect(t0.some((n) => n.pitch === p)).toBe(true);
+    // [1] = C 大三和弦（低八度）48/52/55，持续 2 拍(1000ms)
+    for (const p of [48, 52, 55]) expect(has(p, 0, 1000)).toBe(true);
+    // [5] = G 大三和弦 55/59/62，持续 1.5 拍(750ms)，从 1000ms 起
+    for (const p of [55, 59, 62]) expect(has(p, 1000, 750)).toBe(true);
   });
 
   it('一级大三和弦 [1]', () => {
@@ -57,8 +58,8 @@ describe('和弦', () => {
 
   it('源位置覆盖整个和弦记号', () => {
     const score = parse('1=C\n[4M7]2');
-    // 行 1 偏移 4；'[4M7]' 占 [4,9)
-    const chordNote = score.tracks[1]![0]!;
+    // 行 1 偏移 4；'[4M7]' 占 [4,9)。和弦与旋律同轨，取首个和弦音校验
+    const chordNote = score.tracks[0]!.find((n) => n.isChord)!;
     expect(chordNote.isChord).toBe(true);
     expect(chordNote.srcStart).toBe(4);
     expect(chordNote.srcEnd).toBe(9);

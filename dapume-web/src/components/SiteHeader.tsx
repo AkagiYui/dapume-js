@@ -109,6 +109,9 @@ function TopHeader() {
           </Show>
 
           <nav class="flex items-center gap-0.5">
+            <NavA to="/tutorial" pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
+              {t('nav.tutorial')}
+            </NavA>
             <NavA to="/docs" exact pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
               {t('nav.guide')}
             </NavA>
@@ -138,6 +141,10 @@ function BottomNav() {
       <div class="mx-auto flex max-w-md items-stretch px-2">
         <div class="w-9 shrink-0" aria-hidden="true" />
         <div class="flex flex-1 items-stretch justify-around gap-1">
+          <NavA to="/tutorial" class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
+            <Icon icon="lucide:graduation-cap" class="text-lg" />
+            {t('nav.tutorial')}
+          </NavA>
           <NavA to="/docs" exact class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
             <Icon icon="lucide:book-open" class="text-lg" />
             {t('nav.guide')}

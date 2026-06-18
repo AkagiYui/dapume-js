@@ -45,30 +45,50 @@ describe('基础解析', () => {
   });
 });
 
-describe('多轨', () => {
-  it('括号多轨：1234(567) 生成两个音轨且右对齐', () => {
+describe('行内同时音（括号 = 同一音轨）', () => {
+  it('1234(567)：括号内是同时音，并入同一音轨、右对齐', () => {
     const score = parse('1=C 120bpm\n1234(567)');
-    expect(score.trackCount).toBe(2);
+    // 行内括号 = 同时音 → 同一音轨（不再分轨）
+    expect(score.trackCount).toBe(1);
     expect(flattenTracks(score)).toEqual([
       [0, 60, 0, 250],
       [0, 62, 250, 250],
       [0, 64, 500, 250],
       [0, 65, 750, 250],
-      [1, 67, 250, 250],
-      [1, 69, 500, 250],
-      [1, 71, 750, 250],
+      // (567) 右对齐到 1234 的结束(1000ms)：5@250 6@500 7@750，与 1234 重叠成同时音
+      [0, 67, 250, 250],
+      [0, 69, 500, 250],
+      [0, 71, 750, 250],
     ]);
   });
 
-  it('嵌套多轨：1=D 下 5-345-34(1+(3+(5+)))', () => {
+  it('嵌套括号同样并入同一音轨', () => {
     const score = parse('1=D\n5-345-34(1+(3+(5+)))');
-    expect(score.trackCount).toBe(4);
-    expect(score.tracks[0]!.map((n) => n.pitch)).toEqual([69, 66, 67, 69, 66, 67]);
-    expect(score.tracks[1]).toEqual([
-      expect.objectContaining({ pitch: 62, startTime: 0, duration: 2000 }),
-    ]);
-    expect(score.tracks[2]![0]!.pitch).toBe(66);
-    expect(score.tracks[3]![0]!.pitch).toBe(69);
+    expect(score.trackCount).toBe(1);
+    const pitches = score.tracks[0]!.map((n) => n.pitch);
+    // 旋律音
+    expect(pitches).toEqual(expect.arrayContaining([69, 66, 67]));
+    // 括号内低音 1/3/5 = 62/66/69 也在同一音轨；1+ 持续 4 拍(2000ms)
+    expect(pitches).toContain(62);
+    expect(score.notes.some((n) => n.pitch === 62 && n.startTime === 0 && n.duration === 2000)).toBe(true);
+  });
+});
+
+describe('多轨谱（整行括号 = 新音轨）', () => {
+  it('双手谱：整行被括号包围的行作为与上一行同起点的新音轨', () => {
+    const score = parse('1=C 120bpm\n1111111\n(2222222)\n3333333\n(4444444)');
+    expect(score.trackCount).toBe(2);
+    // 主轨：1111111(C) 接 3333333(E)，顺序推进
+    expect(score.tracks[0]!.map((n) => n.pitch)).toEqual([60, 60, 60, 60, 60, 60, 60, 64, 64, 64, 64, 64, 64, 64]);
+    // 第二轨：2222222(D) 与第一行同起点(0)，4444444(F) 与第三行同起点(1750)
+    expect(score.tracks[1]!.map((n) => n.pitch)).toEqual([62, 62, 62, 62, 62, 62, 62, 65, 65, 65, 65, 65, 65, 65]);
+    expect(score.tracks[1]![0]!.startTime).toBe(0);
+    expect(score.tracks[1]![7]!.startTime).toBe(1750);
+  });
+
+  it('区分行内括号(同时音)与整行括号(新音轨)', () => {
+    expect(parse('1=C\n11(22)').trackCount).toBe(1); // 同一行 → 同时音、同轨
+    expect(parse('1=C\n11\n(22)').trackCount).toBe(2); // 整行括号 → 新音轨
   });
 });
 

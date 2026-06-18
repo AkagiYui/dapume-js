@@ -7,6 +7,7 @@ export const en: typeof zh = {
     tagline: 'Linear score editor & player',
   },
   nav: {
+    tutorial: 'Tutorial',
     guide: 'Rules & Syntax',
     developers: 'Developers',
     workbench: 'Workbench',
@@ -79,10 +80,19 @@ export const en: typeof zh = {
     heroSubtitle:
       'Write simple scores as plain text and render them to MIDI in one click. Let’s walk through the rules and syntax.',
     heroCta: 'Try it now',
+    startTutorial: 'Tutorial',
     tocTitle: 'Contents',
     playExample: 'Play example',
     backToTop: 'Back to top',
     installApp: 'Install app',
+  },
+  tutorial: {
+    heroTitle: 'Learn linear scores step by step',
+    heroSubtitle:
+      'Start from a single note and build up — all the way to a two-hand multi-track score. Play each step to hear it.',
+    openWorkbench: 'Open the workbench',
+    fullReference: 'Full reference',
+    outro: 'That’s all the basics — head to the workbench and combine them into your own piece!',
   },
   manager: {
     title: 'My scores',

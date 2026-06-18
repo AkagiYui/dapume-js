@@ -1,13 +1,16 @@
 /**
  * 线性乐谱解析器
  *
- * 完整复刻 dapume-py 的 `NoteLine` 与 `LinearScore` 解析逻辑，并在此基础上
- * 增加「源文本字符位置」追踪（srcStart/srcEnd），以便上层应用做播放高亮。
+ * 在 dapume-py 的 `NoteLine` / `LinearScore` 解析逻辑之上扩展，并增加「源文本字符位置」
+ * 追踪（srcStart/srcEnd）以便上层做播放高亮。音高、时值、调号、速度、休止符等听感与原版一致。
  *
- * 设计说明（与原版的细微差异，均为提升健壮性，不改变合法乐谱的音乐结果）：
- * - 原版用「函数默认参数」实现参数继承，存在跨实例状态泄漏的隐患；
- *   这里改为每次 {@link parse} 调用从默认值（C 大调 / 120bpm）重新开始，符合规范。
- * - 对空音符块、空括号、行首修饰符等会让原版崩溃的边界情况做了静默跳过处理。
+ * 音轨语义（round-23 起，换行符敏感，不再追求与 dapume-py 的音轨编排一致）：
+ * - 行内的「同时音」——括号 `(...)` 与和弦 `[...]`——都作为复音叠加在同一音轨（右对齐到主光标）。
+ * - 「多轨谱（双手谱）」：当**一整行**被一对括号包围时，该行作为一条新音轨，与上一条普通行同起点；
+ *   普通行依次推进主轨光标。例如四行 `1111111` / `(2222222)` / `3333333` / `(4444444)`：
+ *   主轨为 1111111 接 3333333，第二轨为 2222222、4444444 分别与之并行。
+ *
+ * 健壮性：对空音符块、空括号、行首修饰符等会让原版崩溃的边界情况做静默跳过。
  */
 
 import { chordFromScore } from './chord';
@@ -41,14 +44,22 @@ function identityIndices(s: string): number[] {
 }
 
 /**
- * 解析一个「音符行」（可能是多行拼接而成）为相对音符列表。
+ * 解析一「行」线性乐谱为相对音符列表（均属同一音轨 trackNo=0）。
  *
- * @param score 待解析的文本。
+ * 行内的「同时音」——括号 `(...)` 与和弦 `[...]`——都作为复音叠加在同一音轨上
+ * （右对齐到当前主光标）。多轨（双手谱）由 {@link parse} 在「整行被括号包围」时分配新音轨。
+ *
+ * @param score 待解析的文本（通常是去掉换行后的单行内容）。
  * @param src   与 `score` 等长的数组，`src[i]` 为 `score[i]` 在原始源文本中的下标。
  */
-export function parseNoteLineRelative(score: string, src: number[]): RelativeNote[] {
-  /** 每条音轨「最后一个音符的结束拍」。下标 0 为主轨。 */
-  const lastNoteBeat: number[] = [0];
+export function parseNoteLineRelative(
+  score: string,
+  src: number[],
+  startBeat = 0,
+): { notes: RelativeNote[]; endBeat: number } {
+  /** 主拍光标：从 startBeat 起，本行旋律依次推进的当前拍位置（行内同时音右对齐、不推进它）。
+   *  由调用方把上一行的结束拍续传进来，使整段乐谱的浮点累加与「一次性连续解析」逐位一致。 */
+  let mainBeat = startBeat;
   const relativeNotes: RelativeNote[] = [];
   let noteEnded = false;
   let bracketsLayer = 0;
@@ -60,46 +71,23 @@ export function parseNoteLineRelative(score: string, src: number[]): RelativeNot
   let chordStartSrc = -1;
   let chordEndSrc = -1;
 
-  /** 终止当前音符；时值为零则置为默认 0.5 拍，并推进主轨光标。 */
+  /** 终止当前音符；时值为零则置为默认 0.5 拍，并推进主光标。 */
   function endNote(): void {
     if (noteEnded) return;
     noteEnded = true;
     if (relativeNotes.length > 0) {
       const last = relativeNotes[relativeNotes.length - 1]!;
       if (last.noteValue === 0) last.noteValue = 0.5;
-      lastNoteBeat[0]! += last.noteValue;
+      mainBeat += last.noteValue;
     }
   }
 
-  /**
-   * 编排 n 条音轨，要求它们在最近的 totalValue 拍内空闲。返回音轨编号数组；
-   * 不足时新建音轨。同时把选中的音轨光标对齐到主轨当前位置。
-   */
-  function arrangeTrack(nTracks: number, totalValue: number): number[] {
-    const available: number[] = [];
-    for (let k = 0; k < lastNoteBeat.length; k++) {
-      if (lastNoteBeat[k]! <= lastNoteBeat[0]! - totalValue) available.push(k);
-    }
-    const toAppend = nTracks - available.length;
-    if (toAppend > 0) {
-      const base = lastNoteBeat.length;
-      for (let k = base; k < base + toAppend; k++) {
-        available.push(k);
-        lastNoteBeat.push(0);
-      }
-    }
-    const result = available.slice(0, nTracks);
-    for (const k of result) lastNoteBeat[k] = lastNoteBeat[0]!;
-    return result;
-  }
-
-  /** 终止当前和弦：根据记号生成和弦音并编排到空闲音轨。 */
+  /** 终止当前和弦：生成和弦音，作为「同时音」叠加在同一音轨（trackNo=0）。 */
   function endChord(): void {
     if (chordName === '') return;
-    const chordNoteValue = lastNoteBeat[0]! - chordStartBeat;
+    const chordNoteValue = mainBeat - chordStartBeat;
     const chordNotes = chordFromScore(chordName, chordStartBeat, chordNoteValue, chordStartSrc, chordEndSrc);
-    const available = arrangeTrack(chordNotes.length, chordNoteValue);
-    for (const note of chordNotes) note.trackNo = available[note.trackNo]!;
+    for (const note of chordNotes) note.trackNo = 0;
     relativeNotes.push(...chordNotes);
     chordName = '';
   }
@@ -120,7 +108,7 @@ export function parseNoteLineRelative(score: string, src: number[]): RelativeNot
     } else if (c === '[') {
       endNote();
       endChord();
-      chordStartBeat = lastNoteBeat[0]!;
+      chordStartBeat = mainBeat;
       chordStartSrc = pos;
       chordEndSrc = pos + 1;
       chordNameReading = true;
@@ -134,26 +122,14 @@ export function parseNoteLineRelative(score: string, src: number[]): RelativeNot
         // 递归解析括号内容（去掉开头的 '('）
         const innerScore = bracketsScore.slice(1);
         const innerSrc = bracketsSrc.slice(1);
-        const bracketNotes = parseNoteLineRelative(innerScore, innerSrc);
+        const bracketNotes = parseNoteLineRelative(innerScore, innerSrc).notes;
         if (bracketNotes.length > 0) {
           const lastBN = bracketNotes[bracketNotes.length - 1]!;
           const bracketTotalValue = lastBN.startBeat + lastBN.noteValue;
-          // 括号内出现过的音轨编号（按首次出现顺序去重）
-          const uniqueTracks: number[] = [];
-          const seen = new Set<number>();
-          for (const n of bracketNotes) {
-            if (!seen.has(n.trackNo)) {
-              seen.add(n.trackNo);
-              uniqueTracks.push(n.trackNo);
-            }
-          }
-          const available = arrangeTrack(uniqueTracks.length, bracketTotalValue);
-          const trackMap = new Map<number, number>();
-          uniqueTracks.forEach((k, idx) => trackMap.set(k, available[idx]!));
-          // 将括号内音符右对齐到主轨当前位置，并并入外层
+          // 行内括号 = 同时音：叠加在同一音轨（trackNo=0），右对齐到当前主光标
           for (const note of bracketNotes) {
-            note.trackNo = trackMap.get(note.trackNo)!;
-            note.startBeat = lastNoteBeat[0]! - bracketTotalValue + note.startBeat;
+            note.trackNo = 0;
+            note.startBeat = mainBeat - bracketTotalValue + note.startBeat;
             relativeNotes.push(note);
           }
         }
@@ -175,7 +151,7 @@ export function parseNoteLineRelative(score: string, src: number[]): RelativeNot
       relativeNotes.push({
         trackNo: 0,
         solfa: SOLFEGE_PITCH[Number(c)]!,
-        startBeat: lastNoteBeat[0]!,
+        startBeat: mainBeat,
         noteValue: 0,
         srcStart: pos,
         srcEnd: pos + 1,
@@ -203,7 +179,7 @@ export function parseNoteLineRelative(score: string, src: number[]): RelativeNot
   // 收尾：终止最后的音符与和弦
   endNote();
   endChord();
-  return relativeNotes;
+  return { notes: relativeNotes, endBeat: mainBeat };
 }
 
 /** 将相对音符转换为绝对音符（应用调号与速度）。 */
@@ -226,7 +202,7 @@ function keySignatureToTonic(keySign: string): number {
   const letter = keySign[2]!;
   const solfaToC = pymod(letter.charCodeAt(0) - 'C'.charCodeAt(0), 7) + 1;
   const mini = String(solfaToC) + keySign.slice(3);
-  const rel = parseNoteLineRelative(mini, identityIndices(mini));
+  const rel = parseNoteLineRelative(mini, identityIndices(mini)).notes;
   return (rel[0]?.solfa ?? 0) + DEFAULT_TONIC;
 }
 
@@ -237,6 +213,35 @@ interface LineParam {
   bpm: number;
   /** 调号标签，如 "C"、"Bb."（不含前缀 "1="）。 */
   key: string;
+}
+
+/**
+ * 判断一行是否「整行被一对括号包围」（多轨谱：该行作为新音轨）。
+ * 是则返回去掉外层括号后的内部文本与对应源下标；否则返回 null。
+ * 要求首个 `(` 恰好与末个 `)` 配对——`(1)(2)` 这种行内并列不算整行括号。
+ */
+function fullBracketLine(line: string, base: number): { inner: string; innerSrc: number[] } | null {
+  let start = 0;
+  let end = line.length;
+  while (start < end && /\s/.test(line[start]!)) start++;
+  while (end > start && /\s/.test(line[end - 1]!)) end--;
+  if (end - start < 2 || line[start] !== '(' || line[end - 1] !== ')') return null;
+  let depth = 0;
+  for (let k = start; k < end; k++) {
+    if (line[k] === '(') depth++;
+    else if (line[k] === ')') {
+      depth--;
+      if (depth === 0 && k < end - 1) return null; // 提前闭合 → 非整行括号
+    }
+  }
+  if (depth !== 0) return null; // 括号不平衡
+  const innerChars: string[] = [];
+  const innerSrc: number[] = [];
+  for (let k = start + 1; k < end - 1; k++) {
+    innerChars.push(line[k]!);
+    innerSrc.push(base + k);
+  }
+  return { inner: innerChars.join(''), innerSrc };
 }
 
 /**
@@ -291,43 +296,80 @@ export function parse(text: string): DapumeScore {
   // 末尾哨兵：保证最后一个音符块被解析
   paramByLine.push({ changed: true, tonic: runTonic, bpm: runBpm, key: runKey });
 
-  // 逐块解析：连续的非参数行拼接为一个音符块
+  // 逐行解析（换行符敏感）：
+  //  - 普通行 → 主轨(track 0)，依次推进主光标；
+  //  - 整行被括号包围 → 新音轨（双手谱的另一只手），与上一条普通行同起点；
+  //  - 行内 (...)/[...] = 同时音，仍叠加在本行所属音轨（见 parseNoteLineRelative）。
+  // 连续的非参数行属于同一「块」（同段速度/调号），遇参数行或文末时结算为绝对时间。
   const allNotes: DapumeNote[] = [];
   const sections: DapumeSection[] = [];
   let curParam: ScoreParameters = { tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM };
   let curKey = 'C';
   let stTime = 0;
-  let blockStr = '';
-  let blockSrc: number[] = [];
+
+  // 当前块累积（相对拍）
+  let blockRel: RelativeNote[] = [];
+  let mainBeat = 0; // 主轨拍光标
+  let lineStartBeat = 0; // 上一条普通行的起始拍（整行括号行据此对齐）
+  let bracketIdx = 0; // 当前普通行之后的整行括号计数 → 决定其音轨号
+
+  function flushBlock(): void {
+    if (blockRel.length > 0) {
+      const abs = relativeToAbsolute(blockRel, curParam);
+      const blockStart = stTime;
+      for (const n of abs) {
+        n.startTime += stTime;
+        allNotes.push(n);
+      }
+      // 记录该段的调号/速度（用于按时间查询当前 1=? 与 bpm）
+      sections.push({ startTime: blockStart, tonic: curParam.tonic, bpm: curParam.bpm, key: curKey });
+      // 下一块从「主轨(track 0)最后一个音符的结束」处接续——与原单块顺序解析逐位一致；
+      // 行内同时音右对齐、不延长主轨；若本块仅有整行括号（无主轨），退回用整块最后一个音符。
+      let lastMain = abs[abs.length - 1]!;
+      for (let k = abs.length - 1; k >= 0; k--) {
+        if (abs[k]!.trackNo === 0) {
+          lastMain = abs[k]!;
+          break;
+        }
+      }
+      stTime = lastMain.startTime + lastMain.duration;
+    }
+    blockRel = [];
+    mainBeat = 0;
+    lineStartBeat = 0;
+    bracketIdx = 0;
+  }
 
   for (let i = 0; i < rawLines.length; i++) {
     if (paramByLine[i]!.changed) {
+      flushBlock();
       curParam = { tonic: paramByLine[i]!.tonic, bpm: paramByLine[i]!.bpm };
       curKey = paramByLine[i]!.key;
+      continue;
+    }
+    const line = rawLines[i]!;
+    const base = lineStart[i]!;
+    const fb = fullBracketLine(line, base);
+    if (fb) {
+      // 整行括号 → 新音轨，从上一条普通行的起拍开始（不推进主光标）
+      bracketIdx += 1;
+      const { notes: rel } = parseNoteLineRelative(fb.inner, fb.innerSrc, lineStartBeat);
+      for (const n of rel) {
+        n.trackNo = bracketIdx;
+        blockRel.push(n);
+      }
     } else {
-      const line = rawLines[i]!;
-      const base = lineStart[i]!;
-      for (let j = 0; j < line.length; j++) {
-        blockStr += line[j];
-        blockSrc.push(base + j);
-      }
-      if (paramByLine[i + 1]!.changed) {
-        const rel = parseNoteLineRelative(blockStr, blockSrc);
-        const abs = relativeToAbsolute(rel, curParam);
-        if (abs.length > 0) {
-          const blockStart = stTime; // 本块首音符的时刻
-          for (const n of abs) n.startTime += stTime;
-          const last = abs[abs.length - 1]!;
-          stTime = last.startTime + last.duration;
-          for (const n of abs) allNotes.push(n);
-          // 记录该段的调号/速度（用于按时间查询当前 1=? 与 bpm）
-          sections.push({ startTime: blockStart, tonic: curParam.tonic, bpm: curParam.bpm, key: curKey });
-        }
-        blockStr = '';
-        blockSrc = [];
-      }
+      // 普通行 → 主轨；从当前主光标续解析，主光标随旋律推进（行内同时音右对齐、不延长主轨）
+      lineStartBeat = mainBeat;
+      bracketIdx = 0;
+      const src: number[] = [];
+      for (let j = 0; j < line.length; j++) src.push(base + j);
+      const { notes: rel, endBeat } = parseNoteLineRelative(line, src, mainBeat);
+      for (const n of rel) blockRel.push(n);
+      mainBeat = endBeat;
     }
   }
+  flushBlock();
 
   // 过滤超出 MIDI 范围（0~127）的音符——休止符（0）即由此被剔除
   const valid = allNotes.filter((n) => n.pitch >= 0 && n.pitch <= 127);

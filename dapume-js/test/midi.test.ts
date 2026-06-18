@@ -91,6 +91,24 @@ describe('MIDI 结构', () => {
     expect(m.ntracks).toBe(1 + score.trackCount);
   });
 
+  it('多轨谱：整行括号每声部各成一条 MTrk', () => {
+    const score = parse('1=C 120bpm\n1111111\n(2222222)\n3333333\n(4444444)');
+    expect(score.trackCount).toBe(2);
+    const m = parseMidi(toMidi(score));
+    expect(m.ntracks).toBe(3); // 指挥轨 + 两个声部
+  });
+
+  it('复音音轨（和弦/同时音）编出等量 note_on/note_off 且 delta 非负', () => {
+    // [1] 三和弦与旋律 1234 复音叠在同一音轨（→ MIDI 轨 1）
+    const m = parseMidi(render('1=C 120bpm\n[1]1234'));
+    const tr = m.tracks[1]!;
+    const ons = tr.events.filter((e) => e.type === 'ch:90').length;
+    const offs = tr.events.filter((e) => e.type === 'ch:80').length;
+    expect(ons).toBe(7); // 和弦 3 音 + 旋律 4 音
+    expect(offs).toBe(7);
+    for (const e of tr.events) expect(e.delta).toBeGreaterThanOrEqual(0);
+  });
+
   it('每条轨道以 end_of_track 结尾', () => {
     const m = parseMidi(render('1=C\n1234567'));
     for (const tr of m.tracks) {

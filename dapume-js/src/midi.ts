@@ -96,16 +96,34 @@ function encodeTrack(notes: DapumeNote[], sections: DapumeSection[]): number[] {
   const events: number[] = [];
   events.push(...writeVarLen(0), 0xc0 | CHANNEL, 0x00); // 音色：钢琴（program 0）
 
-  let lastTick = 0;
+  // 同一音轨可能含复音（和弦、行内同时音）。先把 note_on/note_off 拆成事件按 tick 排序，
+  // 再顺序写出——这样重叠音符也能算出非负 delta（单音情形下输出与「顺序写 on/off」一致）。
+  interface NoteEvent {
+    tick: number;
+    on: boolean;
+    pitch: number;
+  }
+  const evs: NoteEvent[] = [];
   for (const note of notes) {
     const pitch = Math.max(0, Math.min(127, note.pitch)) & 0x7f;
     const startTick = msToTicks(note.startTime, sections);
-    const endTick = msToTicks(note.startTime + note.duration, sections);
-    // note_on：delta = 本音符起始 tick - 上一事件 tick
-    events.push(...writeVarLen(Math.max(0, startTick - lastTick)), 0x90 | CHANNEL, pitch, VELOCITY);
-    // note_off：delta = 本音符 tick 时长
-    events.push(...writeVarLen(Math.max(0, endTick - startTick)), 0x80 | CHANNEL, pitch, VELOCITY);
-    lastTick = endTick;
+    // 至少 1 tick，避免零长音符产生「同 tick 的 on/off」
+    const endTick = Math.max(startTick + 1, msToTicks(note.startTime + note.duration, sections));
+    evs.push({ tick: startTick, on: true, pitch });
+    evs.push({ tick: endTick, on: false, pitch });
+  }
+  // 同 tick 时 note_off 先于 note_on（同音先断后起，避免被提前关断），其余按音高稳定排序
+  evs.sort((a, b) => a.tick - b.tick || (a.on === b.on ? a.pitch - b.pitch : a.on ? 1 : -1));
+
+  let lastTick = 0;
+  for (const ev of evs) {
+    events.push(
+      ...writeVarLen(Math.max(0, ev.tick - lastTick)),
+      (ev.on ? 0x90 : 0x80) | CHANNEL,
+      ev.pitch,
+      VELOCITY,
+    );
+    lastTick = ev.tick;
   }
 
   events.push(...writeVarLen(0), 0xff, 0x2f, 0x00); // end_of_track

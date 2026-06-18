@@ -5,6 +5,7 @@ export const zh = {
     tagline: '线性乐谱在线编辑与播放',
   },
   nav: {
+    tutorial: '教程',
     guide: '规则与语法',
     developers: '开发者',
     workbench: '工作台',
@@ -76,10 +77,18 @@ export const zh = {
     heroTitle: '打谱么 · 线性乐谱',
     heroSubtitle: '用纯文本书写简单乐谱，一键渲染为 MIDI。下面带你认识它的规则与语法。',
     heroCta: '马上尝试',
+    startTutorial: '新手教程',
     tocTitle: '目录',
     playExample: '播放示例',
     backToTop: '回到顶部',
     installApp: '安装应用',
+  },
+  tutorial: {
+    heroTitle: '一步步学会线性乐谱',
+    heroSubtitle: '从一个音符开始，循序渐进，最后写出一段双手多轨谱。每一步都能点击播放听效果。',
+    openWorkbench: '到工作台动手写',
+    fullReference: '完整语法手册',
+    outro: '这些就是全部基础啦——去工作台把它们组合成你自己的曲子吧！',
   },
   manager: {
     title: '我的乐谱',

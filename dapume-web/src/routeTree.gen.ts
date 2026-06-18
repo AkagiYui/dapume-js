@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DevelopersRouteImport } from './routes/developers'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkbenchIndexRouteImport } from './routes/workbench.index'
 import { Route as WorkbenchIdRouteImport } from './routes/workbench.$id'
 
+const TutorialRoute = TutorialRouteImport.update({
+  id: '/tutorial',
+  path: '/tutorial',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/developers': typeof DevelopersRoute
   '/docs': typeof DocsRoute
+  '/tutorial': typeof TutorialRoute
   '/workbench/$id': typeof WorkbenchIdRoute
   '/workbench/': typeof WorkbenchIndexRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/developers': typeof DevelopersRoute
   '/docs': typeof DocsRoute
+  '/tutorial': typeof TutorialRoute
   '/workbench/$id': typeof WorkbenchIdRoute
   '/workbench': typeof WorkbenchIndexRoute
 }
@@ -60,19 +68,33 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/developers': typeof DevelopersRoute
   '/docs': typeof DocsRoute
+  '/tutorial': typeof TutorialRoute
   '/workbench/$id': typeof WorkbenchIdRoute
   '/workbench/': typeof WorkbenchIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/developers' | '/docs' | '/workbench/$id' | '/workbench/'
+  fullPaths:
+    | '/'
+    | '/developers'
+    | '/docs'
+    | '/tutorial'
+    | '/workbench/$id'
+    | '/workbench/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/developers' | '/docs' | '/workbench/$id' | '/workbench'
+  to:
+    | '/'
+    | '/developers'
+    | '/docs'
+    | '/tutorial'
+    | '/workbench/$id'
+    | '/workbench'
   id:
     | '__root__'
     | '/'
     | '/developers'
     | '/docs'
+    | '/tutorial'
     | '/workbench/$id'
     | '/workbench/'
   fileRoutesById: FileRoutesById
@@ -81,12 +103,20 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DevelopersRoute: typeof DevelopersRoute
   DocsRoute: typeof DocsRoute
+  TutorialRoute: typeof TutorialRoute
   WorkbenchIdRoute: typeof WorkbenchIdRoute
   WorkbenchIndexRoute: typeof WorkbenchIndexRoute
 }
 
 declare module '@tanstack/solid-router' {
   interface FileRoutesByPath {
+    '/tutorial': {
+      id: '/tutorial'
+      path: '/tutorial'
+      fullPath: '/tutorial'
+      preLoaderRoute: typeof TutorialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/docs': {
       id: '/docs'
       path: '/docs'
@@ -129,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DevelopersRoute: DevelopersRoute,
   DocsRoute: DocsRoute,
+  TutorialRoute: TutorialRoute,
   WorkbenchIdRoute: WorkbenchIdRoute,
   WorkbenchIndexRoute: WorkbenchIndexRoute,
 }
