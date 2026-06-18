@@ -209,11 +209,13 @@ export function PianoRoll(props: PianoRollProps) {
       const active =
         n.startTime <= props.currentTimeMs && props.currentTimeMs < n.startTime + n.duration;
       ctx.fillStyle = trackColor(n.trackNo, active ? 1 : 0.82);
-      fillRect(drawT, drawTLen, p0 + 0.5, Math.max(1.5, cell - 1.5));
+      // 末尾留约 1.5px 间隙：同一琴键连续按多次时相邻音符不再连成一条，可视觉区分
+      const noteLen = Math.max(1.5, drawTLen - 1.5);
+      fillRect(drawT, noteLen, p0 + 0.5, Math.max(1.5, cell - 1.5));
       if (active) {
         ctx.strokeStyle = fg;
         ctx.lineWidth = 1.5;
-        strokeRect(drawT + 0.5, drawTLen - 1, p0 + 1, Math.max(1, cell - 2.5));
+        strokeRect(drawT + 0.5, Math.max(1, noteLen - 1), p0 + 1, Math.max(1, cell - 2.5));
       }
     }
 

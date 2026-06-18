@@ -338,5 +338,12 @@ export function CodeEditor(props: CodeEditorProps) {
 
   onCleanup(() => view?.destroy());
 
-  return <div ref={host} class="h-full w-full overflow-hidden" />;
+  // 部分移动端浏览器点击 contenteditable 不会聚焦/弹出键盘；在点按手势内强制聚焦 CM。
+  const focusOnTap = () => {
+    if (!props.readOnly && view && !view.hasFocus) view.focus();
+  };
+
+  return (
+    <div ref={host} class="h-full w-full overflow-hidden" onPointerUp={focusOnTap} onClick={focusOnTap} />
+  );
 }

@@ -1,5 +1,8 @@
+# 首页内容已迁移到 /docs：根路径 302 跳转到 /docs（客户端路由亦有同样的 beforeLoad 重定向兜底）。
+/ /docs 302
+
 # SPA 回退：未命中静态文件的请求返回 index.html（由客户端路由接管）。
-# 预渲染的 / 与 /developers 是真实静态文件，会被优先直接返回。
+# 预渲染的 /docs 与 /developers 是真实静态文件，会被优先直接返回。
 # 注意：必须用 index.html 作为回退目标——它是 SPA 入口、被特殊处理；
 # 若用其它 *.html（如 spa.html），Cloudflare 会把它 308 跳到去掉 .html 的干净 URL，
 # 从而与本规则形成无限重定向。

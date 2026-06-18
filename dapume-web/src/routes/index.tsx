@@ -1,7 +1,8 @@
-/** 路由 `/` —— 规则与语法（指南页）。 */
-import { createFileRoute } from '@tanstack/solid-router';
-import Guide from '~/pages/Guide';
+/** 路由 `/` —— 重定向到 /docs（首页内容已迁移至 /docs）。 */
+import { createFileRoute, redirect } from '@tanstack/solid-router';
 
 export const Route = createFileRoute('/')({
-  component: Guide,
+  beforeLoad: () => {
+    throw redirect({ to: '/docs' });
+  },
 });

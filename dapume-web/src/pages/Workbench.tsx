@@ -495,7 +495,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           variant="outline"
           size="icon"
           class="size-7 shrink-0"
-          onClick={() => setDelayMs(Math.max(0, delayMs() - 10))}
+          onClick={() => setDelayMs(Math.max(0, delayMs() - 5))}
           disabled={delayMs() <= 0}
           aria-label={t('workbench.delayDown')}
         >
@@ -505,7 +505,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           class="min-w-0 flex-1"
           minValue={0}
           maxValue={500}
-          step={10}
+          step={5}
           value={[delayMs()]}
           onChange={(v) => setDelayMs(v[0]!)}
         >
@@ -518,7 +518,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           variant="outline"
           size="icon"
           class="size-7 shrink-0"
-          onClick={() => setDelayMs(Math.min(500, delayMs() + 10))}
+          onClick={() => setDelayMs(Math.min(500, delayMs() + 5))}
           disabled={delayMs() >= 500}
           aria-label={t('workbench.delayUp')}
         >

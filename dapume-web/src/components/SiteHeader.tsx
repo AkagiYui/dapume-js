@@ -51,17 +51,21 @@ function NavA(props: {
   return (
     <a
       href={props.to}
-      class={cn('relative isolate', props.class, active() && props.activeClass)}
+      class={cn('relative', props.class, active() && props.activeClass)}
       onClick={(e) => {
         // 仅拦截普通左键点击（保留 Cmd/Ctrl/中键新开标签等原生行为）
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();
-        navigateWithTransition(() => void navigate({ to: props.to }), location().pathname, props.to);
+        // 返回 navigate 的 Promise，让视图过渡等待目标页（可能懒加载）渲染完成后再捕获新快照，
+        // 否则首次切换会因新页未就绪而「闪一下、无滑动」。
+        navigateWithTransition(() => navigate({ to: props.to }), location().pathname, props.to);
       }}
     >
+      {/* 激活指示改为底部下划线滑块：切页时在新旧激活项间滑动，且不会盖住文字
+          （过渡时命名元素被提升到顶层，填充块会遮文字，故用细下划线）。 */}
       <Show when={props.pill && active()}>
         <span
-          class="absolute inset-0 -z-10 rounded-md bg-accent"
+          class="absolute inset-x-2 bottom-0.5 h-0.5 rounded-full bg-primary"
           style={{ 'view-transition-name': 'nav-active' }}
         />
       </Show>
@@ -78,7 +82,7 @@ function TopHeader() {
       style={{ 'view-transition-name': 'site-header' }}
     >
       <div class="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-        <NavA to="/" exact class="flex items-baseline gap-2" activeClass="">
+        <NavA to="/docs" exact class="flex items-baseline gap-2" activeClass="">
           <span class="text-lg font-bold">{t('app.title')}</span>
           <span class="hidden text-sm text-muted-foreground sm:inline">{t('app.tagline')}</span>
         </NavA>
@@ -100,7 +104,7 @@ function TopHeader() {
           </Show>
 
           <nav class="flex items-center gap-0.5">
-            <NavA to="/" exact pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
+            <NavA to="/docs" exact pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
               {t('nav.guide')}
             </NavA>
             <NavA to="/developers" pill class={LINK_CLASS} activeClass={LINK_ACTIVE}>
@@ -124,20 +128,25 @@ function BottomNav() {
       class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/90 backdrop-blur"
       style={{ 'padding-bottom': 'env(safe-area-inset-bottom)', 'view-transition-name': 'site-header' }}
     >
-      <div class="mx-auto flex max-w-md items-stretch justify-around gap-1 px-2">
-        <NavA to="/" exact class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
-          <Icon icon="lucide:book-open" class="text-lg" />
-          {t('nav.guide')}
-        </NavA>
-        <NavA to="/developers" class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
-          <Icon icon="lucide:code" class="text-lg" />
-          {t('nav.developers')}
-        </NavA>
-        <NavA to="/workbench" class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
-          <Icon icon="lucide:music" class="text-lg" />
-          {t('nav.workbench')}
-        </NavA>
-        <div class="flex items-center px-1">
+      {/* 左侧占位 = 设置按钮宽：让 3 个导航按钮居中均分、不被右侧的设置按钮挤偏
+          （设置不参与导航按钮的空间计算）。 */}
+      <div class="mx-auto flex max-w-md items-stretch px-2">
+        <div class="w-9 shrink-0" aria-hidden="true" />
+        <div class="flex flex-1 items-stretch justify-around gap-1">
+          <NavA to="/docs" exact class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
+            <Icon icon="lucide:book-open" class="text-lg" />
+            {t('nav.guide')}
+          </NavA>
+          <NavA to="/developers" class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
+            <Icon icon="lucide:code" class="text-lg" />
+            {t('nav.developers')}
+          </NavA>
+          <NavA to="/workbench" class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
+            <Icon icon="lucide:music" class="text-lg" />
+            {t('nav.workbench')}
+          </NavA>
+        </div>
+        <div class="flex w-9 shrink-0 items-center justify-center">
           <SettingsButton />
         </div>
       </div>

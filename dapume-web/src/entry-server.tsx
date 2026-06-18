@@ -6,8 +6,8 @@ import { renderToStringAsync } from 'solid-js/web';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/solid-router';
 import { routeTree } from './routeTree.gen';
 
-/** 需要预渲染（SSG）的路由。其余路由（如 /workbench）保持纯 SPA。 */
-export const ROUTES = ['/', '/developers'] as const;
+/** 需要预渲染（SSG）的路由。`/` 改为重定向到 /docs，故预渲染 /docs；其余（如 /workbench）保持纯 SPA。 */
+export const ROUTES = ['/docs', '/developers'] as const;
 
 /** 把单个路由 URL 渲染为放入 <div id="root"> 内的 HTML 字符串。 */
 export async function renderPage(url: string): Promise<string> {
