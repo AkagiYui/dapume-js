@@ -46,8 +46,13 @@ function NavA(props: {
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const active = () =>
-    props.exact ? location().pathname === props.to : location().pathname.startsWith(props.to);
+  // 忽略末尾斜杠再比较：CF Pages 等可能把 /docs 规范成 /docs/，否则首个按钮高亮(下划线)不出现
+  const active = () => {
+    const strip = (p: string) => p.replace(/\/+$/, '') || '/';
+    const here = strip(location().pathname);
+    const target = strip(props.to);
+    return props.exact ? here === target : here === target || here.startsWith(`${target}/`);
+  };
   return (
     <a
       href={props.to}

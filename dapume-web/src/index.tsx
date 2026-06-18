@@ -19,12 +19,31 @@ if (isStandalone()) {
   }
 }
 
+// 去掉非根路径末尾多余的斜杠（如 CF Pages 把 /docs 规范成 /docs/），保持 URL 干净，
+// 也确保导航高亮（按 pathname 精确匹配）不因末尾斜杠而失配。
+{
+  const path = window.location.pathname;
+  if (path.length > 1 && path.endsWith('/')) {
+    try {
+      window.history.replaceState(
+        null,
+        '',
+        path.replace(/\/+$/, '') + window.location.search + window.location.hash,
+      );
+    } catch {
+      /* 忽略 */
+    }
+  }
+}
+
 const router = createRouter({
   routeTree,
   // 不用 TanStack 的 preloadRoute（该版本在本项目下会抛 _nonReactive 错），
   // 改为下方「空闲时直接 import 页面模块」来预加载，效果一致且无副作用。
   defaultPreload: false,
   scrollRestoration: true,
+  // 统一去掉末尾斜杠（CF Pages 等可能把 /docs 规范成 /docs/），保持 URL 干净、避免高亮判断失配
+  trailingSlash: 'never',
 });
 
 // 类型安全注册（声明合并）
