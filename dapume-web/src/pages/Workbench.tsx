@@ -12,7 +12,7 @@
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { useNavigate } from '@tanstack/solid-router';
-import { activeNotesAt, parse, paramsAt, toMidi } from 'dapume-js';
+import { activeEventsAt, parse, paramsAt, toMidi } from 'dapume-js';
 import type { DapumeScore } from 'dapume-js';
 
 import { CodeEditor } from '~/components/CodeEditor';
@@ -110,9 +110,17 @@ const CHEAT: { s: string; zh: string; en: string }[] = [
   { s: '[ ]', zh: '和弦', en: 'chord' },
   { s: '1=C', zh: '调号', en: 'key' },
   { s: '120bpm', zh: '速度', en: 'tempo' },
+  { s: '// …', zh: '行尾注释', en: 'line comment' },
 ];
 
-const EMPTY_SCORE: DapumeScore = { tracks: [], notes: [], trackCount: 0, durationMs: 0, sections: [] };
+const EMPTY_SCORE: DapumeScore = {
+  tracks: [],
+  notes: [],
+  events: [],
+  trackCount: 0,
+  durationMs: 0,
+  sections: [],
+};
 
 export default function Workbench(props: { doc: ScoreDoc }) {
   const navigate = useNavigate();
@@ -232,10 +240,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 视觉时间 = 播放时间 - 延迟：卷帘与高亮整体延后，与无线耳机听到的声音对齐
   const visualTimeMs = createMemo(() => Math.max(0, currentTimeMs() - delayMs()));
 
-  // 播放/暂停时高亮当前发声音符对应的源字符（用视觉时间）
+  // 播放/暂停时高亮当前时间轴事件对应的源字符（含休止符，用视觉时间）
   const highlights = createMemo(() => {
     if (!playActive()) return [];
-    return activeNotesAt(score(), visualTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
+    return activeEventsAt(score(), visualTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
   });
 
   // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示，用视觉时间）
@@ -250,47 +258,115 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     }
   }
 
-  // 空格键播放/暂停：在编辑器、输入框、按钮、开关、滑块等可聚焦控件上不拦截（让其原生行为生效）
-  const onSpace = (e: KeyboardEvent) => {
-    if (e.code !== 'Space') return;
+  /** 跳转进度；若当前正在播放，立即从目标位置续播。 */
+  function jumpTo(ms: number) {
+    const s = score();
+    const target = Math.max(0, Math.min(ms, s.durationMs));
+    const resume = isPlaying();
+    if (resume) pause();
+    seek(target);
+    if (resume && s.notes.length > 0 && target < s.durationMs) void play(s.notes, s.durationMs, target);
+  }
+
+  // 去重并排序的事件起始时刻。休止符同样是可导航的乐谱事件。
+  const onsetTimes = createMemo(() => {
+    const set = new Set<number>();
+    for (const event of score().events) set.add(event.startTime);
+    return [...set].sort((a, b) => a - b);
+  });
+
+  /** 每个含乐谱事件的源码行及其最早时间。 */
+  const lineEntries = createMemo(() => {
+    const starts = [0];
+    const text = scoreText();
+    for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
+    const lineAt = (pos: number) => {
+      let lo = 0;
+      let hi = starts.length;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (starts[mid]! <= pos) lo = mid;
+        else hi = mid;
+      }
+      return lo + 1;
+    };
+    const firstByLine = new Map<number, number>();
+    for (const event of score().events) {
+      if (event.srcStart < 0) continue;
+      const line = lineAt(event.srcStart);
+      const prev = firstByLine.get(line);
+      if (prev === undefined || event.startTime < prev) firstByLine.set(line, event.startTime);
+    }
+    return [...firstByLine].map(([line, time]) => ({ line, time })).sort((a, b) => a.line - b.line);
+  });
+
+  // 行导航按“行首时间”步进；并行音轨若同一时刻开始，只产生一个有效跳点。
+  const lineOnsetTimes = createMemo(() =>
+    [...new Set(lineEntries().map((entry) => entry.time))].sort((a, b) => a - b),
+  );
+
+  function seekNext(times: number[]) {
+    const t = times.find((x) => x > currentTimeMs() + 1);
+    if (t !== undefined) jumpTo(t);
+  }
+  function seekPrev(times: number[]) {
+    let prev = 0;
+    for (const x of times) {
+      if (x < currentTimeMs() - 1) prev = x;
+      else break;
+    }
+    jumpTo(prev);
+  }
+  function seekToNextNote() {
+    seekNext(onsetTimes());
+  }
+  function seekToPrevNote() {
+    seekPrev(onsetTimes());
+  }
+  function seekToNextLine() {
+    seekNext(lineOnsetTimes());
+  }
+  function seekToPrevLine() {
+    seekPrev(lineOnsetTimes());
+  }
+  function seekToLine(lineNumber: number) {
+    const entries = lineEntries();
+    const exactOrNext = entries.find((entry) => entry.line >= lineNumber) ?? entries[entries.length - 1];
+    if (exactOrNext) jumpTo(exactOrNext.time);
+  }
+
+  // 空格播放/暂停；方向键左右逐事件、上下逐行。输入控件保留其原生按键行为；
+  // 编辑停止态也保留光标移动，播放/暂停锁定编辑后方向键才接管进度。
+  const onPlaybackKey = (e: KeyboardEvent) => {
+    const isArrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key);
+    if (e.code !== 'Space' && !isArrow) return;
     const el = document.activeElement as HTMLElement | null;
     const tag = el?.tagName;
     if (
       el &&
-      (el.isContentEditable ||
-        tag === 'INPUT' ||
+      (tag === 'INPUT' ||
         tag === 'TEXTAREA' ||
         tag === 'BUTTON' ||
         el.getAttribute('role') === 'switch' ||
         el.getAttribute('role') === 'slider')
     )
       return;
-    if (score().notes.length === 0) return;
-    e.preventDefault();
-    onPlayPause();
-  };
-  window.addEventListener('keydown', onSpace);
-  onCleanup(() => window.removeEventListener('keydown', onSpace));
-
-  // 去重并排序的音符起始时刻，用于「上一个 / 下一个音符」按帧步进（仅停止 / 暂停态可用）
-  const onsetTimes = createMemo(() => {
-    const set = new Set<number>();
-    for (const n of score().notes) set.add(n.startTime);
-    return [...set].sort((a, b) => a - b);
-  });
-  function seekToNextNote() {
-    const t = onsetTimes().find((x) => x > currentTimeMs() + 1);
-    if (t !== undefined) seek(t);
-  }
-  function seekToPrevNote() {
-    const arr = onsetTimes();
-    let prev = 0;
-    for (const x of arr) {
-      if (x < currentTimeMs() - 1) prev = x;
-      else break;
+    if (el?.isContentEditable && (!playActive() || e.code === 'Space')) return;
+    if (e.code === 'Space') {
+      if (score().notes.length === 0) return;
+      e.preventDefault();
+      onPlayPause();
+      return;
     }
-    seek(prev);
-  }
+    if (score().events.length === 0) return;
+    e.preventDefault();
+    if (e.key === 'ArrowLeft') seekToPrevNote();
+    else if (e.key === 'ArrowRight') seekToNextNote();
+    else if (e.key === 'ArrowUp') seekToPrevLine();
+    else seekToNextLine();
+  };
+  window.addEventListener('keydown', onPlaybackKey);
+  onCleanup(() => window.removeEventListener('keydown', onPlaybackKey));
 
   // 以乐谱标题作为下载文件名（过滤掉文件名非法字符）
   const fileName = (ext: string) =>
@@ -330,18 +406,27 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           <Icon icon="lucide:lock" />
         </InfoTip>
       </Show>
-      {/* 播放/暂停时，在音符数左侧实时显示当前 1=调号 与 bpm（自解释，无需提示） */}
+      {/* 用图标化状态替代紧挨在一起的 “1=C 160bpm”。 */}
       <Show when={playActive()}>
-        <span class="flex min-w-0 shrink items-center gap-1.5 truncate font-medium text-foreground tabular-nums">
-          <span>1={liveParams().key}</span>
-          <span class="opacity-60">·</span>
-          <span>{liveParams().bpm}bpm</span>
-        </span>
+        <InfoTip label={t('workbench.key')} class="shrink-0 gap-1 font-medium text-foreground">
+          <Icon icon="mdi:music-clef-treble" />
+          <span>{liveParams().key}</span>
+        </InfoTip>
+        <InfoTip
+          label={t('workbench.tempo')}
+          class="shrink-0 gap-1 font-medium text-foreground tabular-nums"
+        >
+          <Icon icon="mdi:metronome" />
+          <span>{liveParams().bpm}</span>
+        </InfoTip>
       </Show>
-      {/* 用组件库 tooltip 取代原生 title：桌面 hover、移动端点击均可弹出说明。仅显示音符数（音轨数已去掉）。 */}
       <InfoTip label={t('workbench.notes')} class="shrink-0 gap-1 tabular-nums">
         <Icon icon="lucide:music" />
         {score().notes.length}
+      </InfoTip>
+      <InfoTip label={t('workbench.tracks')} class="shrink-0 gap-1 tabular-nums">
+        <Icon icon="mdi:layers-triple-outline" />
+        {score().trackCount}
       </InfoTip>
     </div>
   );
@@ -356,6 +441,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       keepVisible={keepLine() && playActive()}
       smoothScroll={smooth()}
       sticky={sticky()}
+      onLineClick={seekToLine}
       placeholder={'1=C 120bpm\n1234567'}
     />
   );
@@ -381,7 +467,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
    * 上一个音符 / 播放暂停 / 停止 / 下一个音符 + 进度条（大屏附时间）。 */
   const CompactPlayback = () => {
     const noNotes = () => score().notes.length === 0;
-    const stepDisabled = () => isPlaying() || noNotes();
+    const stepDisabled = () => score().events.length === 0;
     return (
       <div class="flex shrink-0 items-center gap-0.5">
         <Button
@@ -657,6 +743,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         orientation={pianoVertical() ? 'vertical' : 'horizontal'}
         keyboardFlip={pianoKbFlip()}
         judgeAtKeyboard={pianoJudgeKb()}
+        onSeek={jumpTo}
       />
     </Show>
   );
@@ -735,7 +822,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       </Show>
       {/* 操作提示：溢出省略、不换行 */}
       <span class="hidden min-w-0 shrink truncate text-xs text-muted-foreground sm:block">
-        {locale() === 'zh' ? '滚轮平移 · Ctrl+滚轮缩放' : 'Wheel: pan · Ctrl+Wheel: zoom'}
+        {locale() === 'zh'
+          ? '点击定位 · 滚轮平移 · Ctrl+滚轮缩放'
+          : 'Click: seek · Wheel: pan · Ctrl+Wheel: zoom'}
       </span>
     </div>
   );
@@ -812,7 +901,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // ===== 窄屏底部播放条 =====
   const NarrowPlayerBar = () => {
     const noNotes = () => score().notes.length === 0;
-    const stepDisabled = () => isPlaying() || noNotes();
+    const stepDisabled = () => score().events.length === 0;
     return (
       <div class="flex items-center gap-1 border-t bg-background px-2 py-2">
         <Button

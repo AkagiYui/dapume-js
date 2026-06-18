@@ -26,7 +26,7 @@ export const zh = {
     browserDesc: '得到 MIDI 字节后，用 Blob 触发下载：',
     moreTitle: '更多工具函数',
     moreDesc:
-      'render() 一步完成「解析 + 渲染」；tokenize() 返回用于语法高亮的词法单元；activeNotesAt() 返回某时刻正在发声的音符；paramsAt() 返回某时刻生效的调号与速度（{ key, bpm, tonic, startTime }）。',
+      'render() 一步完成「解析 + 渲染」；tokenize() 返回语法高亮词法单元；activeNotesAt() 返回正在发声的音符；activeEventsAt() 还会返回当前休止符；paramsAt() 返回某时刻生效的调号与速度。',
     typesTitle: '类型一览',
     vscodeTitle: 'VSCode 扩展',
     vscodeDesc:
@@ -153,6 +153,8 @@ export const zh = {
     clear: '清空',
     notes: '音符数',
     tracks: '音轨',
+    key: '调性',
+    tempo: '速度',
     duration: '时长',
     playingLocked: '播放中，编辑已锁定',
     quickRef: '速查',

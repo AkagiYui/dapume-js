@@ -28,7 +28,7 @@
 
 import { parse } from './parser';
 import { toMidi } from './midi';
-import type { DapumeNote, DapumeScore } from './types';
+import type { DapumeEvent, DapumeNote, DapumeScore } from './types';
 
 export { parse, paramsAt } from './parser';
 export { toMidi } from './midi';
@@ -36,6 +36,7 @@ export { tokenize } from './tokenize';
 
 export type {
   DapumeScore,
+  DapumeEvent,
   DapumeNote,
   DapumeSection,
   RelativeNote,
@@ -63,4 +64,12 @@ export function render(text: string): Uint8Array {
  */
 export function activeNotesAt(score: DapumeScore, timeMs: number): DapumeNote[] {
   return score.notes.filter((n) => n.startTime <= timeMs && timeMs < n.startTime + n.duration);
+}
+
+/**
+ * 返回给定时刻的所有时间轴事件，包含不会发声的休止符。
+ * 适合驱动编辑器播放高亮与进度导航。
+ */
+export function activeEventsAt(score: DapumeScore, timeMs: number): DapumeEvent[] {
+  return score.events.filter((e) => e.startTime <= timeMs && timeMs < e.startTime + e.duration);
 }

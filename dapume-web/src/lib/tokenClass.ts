@@ -10,4 +10,5 @@ export const TOKEN_CLASS: Record<TokenType, string> = {
   'duration-mod': 'tok-duration',
   bracket: 'tok-bracket',
   chord: 'tok-chord',
+  comment: 'tok-comment',
 };

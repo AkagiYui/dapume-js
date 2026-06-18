@@ -29,6 +29,31 @@ export interface RelativeNote {
   srcEnd: number;
   /** 是否来自和弦记号 `[...]`。 */
   isChord: boolean;
+  /** 是否为休止符。休止符参与时间轴与源码高亮，但不会进入 MIDI 音轨。 */
+  isRest?: boolean;
+}
+
+/**
+ * 乐谱时间轴事件。与可发声的 {@link DapumeNote} 不同，事件也包含休止符，
+ * 因而适合驱动播放定位、编辑器高亮和逐事件导航。
+ */
+export interface DapumeEvent {
+  /** 音轨编号。 */
+  trackNo: number;
+  /** MIDI 音高；休止符为 null。 */
+  pitch: number | null;
+  /** 起始时刻（毫秒）。 */
+  startTime: number;
+  /** 持续时长（毫秒）。 */
+  duration: number;
+  /** 源字符起始下标（含）。 */
+  srcStart: number;
+  /** 源字符结束下标（不含）。 */
+  srcEnd: number;
+  /** 是否来自和弦记号 `[...]`。 */
+  isChord: boolean;
+  /** 是否为休止符。 */
+  isRest: boolean;
 }
 
 /**
@@ -73,6 +98,8 @@ export interface DapumeScore {
   tracks: DapumeNote[][];
   /** 所有音符的扁平列表，已按开始时刻升序排序，便于播放与高亮。 */
   notes: DapumeNote[];
+  /** 所有时间轴事件（含休止符），已按开始时刻升序排序。 */
+  events: DapumeEvent[];
   /** 音轨数量。 */
   trackCount: number;
   /** 乐谱总时长（毫秒），即最后一个音符的结束时刻。 */
@@ -98,7 +125,9 @@ export type TokenType =
   /** 多轨括号 `( )`。 */
   | 'bracket'
   /** 和弦记号 `[...]`（整体）。 */
-  | 'chord';
+  | 'chord'
+  /** `//` 起至当前行末尾的注释。 */
+  | 'comment';
 
 /** 语法高亮词法单元。 */
 export interface Token {

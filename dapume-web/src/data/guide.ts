@@ -121,6 +121,26 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: 'comment',
+    title: L('注释', 'Comments'),
+    paragraphs: {
+      zh: [
+        '双斜杠 // 后直到当前行末尾的内容都是注释，解析和播放时会被完全忽略。',
+        '注释既可以单独占一行，也可以写在参数行或音符行后，用来记录乐句、指法或排练提示。',
+      ],
+      en: [
+        'Everything after // through the end of the current line is a comment and is ignored during parsing and playback.',
+        'Comments may occupy their own line or follow a parameter/note line for phrases, fingering, or rehearsal notes.',
+      ],
+    },
+    examples: [
+      {
+        code: '1=C 100bpm // C 大调\n1234       // 第一乐句\n// 换气\n5432',
+        caption: L('注释不会改变演奏结果', 'Comments do not change playback'),
+      },
+    ],
+  },
+  {
     id: 'simul',
     title: L('同时音', 'Simultaneous notes'),
     paragraphs: {

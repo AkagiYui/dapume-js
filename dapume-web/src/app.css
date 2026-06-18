@@ -205,12 +205,14 @@ html.standalone:not(.editor-page) body {
 .tok-duration { color: oklch(0.55 0.16 240); }
 .tok-bracket  { color: oklch(0.65 0.18 145); font-weight: 600; }
 .tok-chord    { color: oklch(0.62 0.2 47); font-weight: 600; }
+.tok-comment  { color: var(--muted-foreground); font-style: italic; }
 .dark .tok-key      { color: oklch(0.78 0.16 293); }
 .dark .tok-bpm      { color: oklch(0.78 0.12 200); }
 .dark .tok-pitch    { color: oklch(0.78 0.16 25); }
 .dark .tok-duration { color: oklch(0.75 0.13 240); }
 .dark .tok-bracket  { color: oklch(0.8 0.16 145); }
 .dark .tok-chord    { color: oklch(0.8 0.16 60); }
+.dark .tok-comment  { color: oklch(0.7 0.03 250); }
 
 /* ===== highlight.js 主题（适配深浅色，用于开发者文档代码块）===== */
 .hljs {

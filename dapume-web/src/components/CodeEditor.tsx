@@ -250,6 +250,8 @@ export interface CodeEditorProps {
   smoothScroll?: boolean;
   /** 是否启用「参数行粘性置顶」。 */
   sticky?: boolean;
+  /** 点击某一行时通知上层，用于把播放进度定位到该行行首。 */
+  onLineClick?: (lineNumber: number) => void;
   placeholder?: string;
 }
 
@@ -283,6 +285,15 @@ export function CodeEditor(props: CodeEditorProps) {
           stickyHeaderPlugin(),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) props.onChange?.(u.state.doc.toString());
+          }),
+          EditorView.domEventHandlers({
+            mousedown(event, editor) {
+              if (event.button !== 0 || !props.onLineClick) return false;
+              const pos = editor.posAtCoords({ x: event.clientX, y: event.clientY });
+              if (pos !== null) props.onLineClick(editor.state.doc.lineAt(pos).number);
+              // 不阻止 CodeMirror 自身的光标/选区行为，停止态仍可正常编辑。
+              return false;
+            },
           }),
         ],
       }),

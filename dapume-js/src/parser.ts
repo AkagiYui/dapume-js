@@ -25,6 +25,7 @@ import {
 } from './constants';
 import type {
   DapumeNote,
+  DapumeEvent,
   DapumeScore,
   DapumeSection,
   RelativeNote,
@@ -156,6 +157,7 @@ export function parseNoteLineRelative(
         srcStart: pos,
         srcEnd: pos + 1,
         isChord: false,
+        isRest: c === '0',
       });
       noteEnded = false;
     } else if (c === '.' || c === ',' || c === '#' || c === 'b') {
@@ -173,7 +175,7 @@ export function parseNoteLineRelative(
         last.srcEnd = pos + 1;
       }
     }
-    // 其它字符（'/' 小节线、换行、空白等）一律忽略
+    // 其它未知字符与空白一律忽略。注释已由 parse() 在逐行解析前截掉。
   }
 
   // 收尾：终止最后的音符与和弦
@@ -183,18 +185,25 @@ export function parseNoteLineRelative(
 }
 
 /** 将相对音符转换为绝对音符（应用调号与速度）。 */
-function relativeToAbsolute(rel: RelativeNote[], param: ScoreParameters): DapumeNote[] {
+function relativeToAbsolute(rel: RelativeNote[], param: ScoreParameters): DapumeEvent[] {
   const msPerBeat = param.bpm > 0 ? (60 / param.bpm) * 1000 : 0;
   return rel.map((n) => ({
     trackNo: n.trackNo,
-    pitch: n.solfa + param.tonic,
+    pitch: n.isRest ? null : n.solfa + param.tonic,
     // 与 Python int() 一致：对非负数取整即截断
     startTime: Math.trunc(n.startBeat * msPerBeat),
     duration: Math.trunc(n.noteValue * msPerBeat),
     srcStart: n.srcStart,
     srcEnd: n.srcEnd,
     isChord: n.isChord,
+    isRest: !!n.isRest,
   }));
+}
+
+/** 去掉一行中从首个 `//` 起到行尾的注释；返回值长度仍对应原行前缀。 */
+function withoutComment(line: string): string {
+  const i = line.indexOf('//');
+  return i < 0 ? line : line.slice(0, i);
 }
 
 /** 由调号记号（如 `1=D`、`1=Bb.`）计算主音音高（MIDI）。 */
@@ -261,6 +270,7 @@ function fullBracketLine(line: string, base: number): { inner: string; innerSrc:
  */
 export function parse(text: string): DapumeScore {
   const rawLines = text.split('\n');
+  const codeLines = rawLines.map(withoutComment);
 
   // 计算每行在原始文本中的起始偏移
   const lineStart: number[] = [];
@@ -277,7 +287,7 @@ export function parse(text: string): DapumeScore {
   let runBpm = DEFAULT_BPM;
   let runKey = 'C';
   const paramByLine: LineParam[] = [];
-  for (const line of rawLines) {
+  for (const line of codeLines) {
     let changed = false;
     const km = line.match(RE_PATTERN_KEY_SIGNATURE);
     if (km) {
@@ -301,7 +311,7 @@ export function parse(text: string): DapumeScore {
   //  - 整行被括号包围 → 新音轨（双手谱的另一只手），与上一条普通行同起点；
   //  - 行内 (...)/[...] = 同时音，仍叠加在本行所属音轨（见 parseNoteLineRelative）。
   // 连续的非参数行属于同一「块」（同段速度/调号），遇参数行或文末时结算为绝对时间。
-  const allNotes: DapumeNote[] = [];
+  const allEvents: DapumeEvent[] = [];
   const sections: DapumeSection[] = [];
   let curParam: ScoreParameters = { tonic: DEFAULT_TONIC, bpm: DEFAULT_BPM };
   let curKey = 'C';
@@ -319,7 +329,7 @@ export function parse(text: string): DapumeScore {
       const blockStart = stTime;
       for (const n of abs) {
         n.startTime += stTime;
-        allNotes.push(n);
+        allEvents.push(n);
       }
       // 记录该段的调号/速度（用于按时间查询当前 1=? 与 bpm）
       sections.push({ startTime: blockStart, tonic: curParam.tonic, bpm: curParam.bpm, key: curKey });
@@ -347,7 +357,7 @@ export function parse(text: string): DapumeScore {
       curKey = paramByLine[i]!.key;
       continue;
     }
-    const line = rawLines[i]!;
+    const line = codeLines[i]!;
     const base = lineStart[i]!;
     const fb = fullBracketLine(line, base);
     if (fb) {
@@ -371,8 +381,11 @@ export function parse(text: string): DapumeScore {
   }
   flushBlock();
 
-  // 过滤超出 MIDI 范围（0~127）的音符——休止符（0）即由此被剔除
-  const valid = allNotes.filter((n) => n.pitch >= 0 && n.pitch <= 127);
+  // 可发声音符进入 notes/tracks；休止符只保留在 events 中供高亮与导航。
+  const valid = allEvents.filter(
+    (n): n is DapumeEvent & { pitch: number; isRest: false } =>
+      !n.isRest && n.pitch !== null && n.pitch >= 0 && n.pitch <= 127,
+  );
 
   // 按音轨分组（保持解析顺序，以便渲染 MIDI）
   let trackCount = 0;
@@ -388,11 +401,17 @@ export function parse(text: string): DapumeScore {
     return a.pitch - b.pitch;
   });
 
+  const events = allEvents.slice().sort((a, b) => {
+    if (a.startTime !== b.startTime) return a.startTime - b.startTime;
+    if (a.trackNo !== b.trackNo) return a.trackNo - b.trackNo;
+    return (a.pitch ?? -1) - (b.pitch ?? -1);
+  });
+
   // 总时长
   let durationMs = 0;
-  for (const n of valid) durationMs = Math.max(durationMs, n.startTime + n.duration);
+  for (const n of events) durationMs = Math.max(durationMs, n.startTime + n.duration);
 
-  return { tracks, notes, trackCount, durationMs, sections };
+  return { tracks, notes, events, trackCount, durationMs, sections };
 }
 
 /**

@@ -82,6 +82,7 @@ URL.revokeObjectURL(url);
 interface DapumeScore {
   tracks: DapumeNote[][];     // 按音轨分组的音符（其内部顺序用于渲染 MIDI）
   notes: DapumeNote[];        // 所有音符的扁平列表，已按开始时刻升序排序
+  events: DapumeEvent[];      // 所有时间轴事件（含休止符），已按开始时刻排序
   trackCount: number;         // 音轨数量
   durationMs: number;         // 总时长（毫秒）
   sections: DapumeSection[];  // 各参数段（调号/速度随时间的变化），按开始时刻升序
@@ -108,7 +109,7 @@ interface DapumeNote {
 
 ### `tokenize(text: string): Token[]`
 
-将文本切分为语法高亮用的词法单元（按源位置升序、互不重叠）。类型见 `TokenType`：`key`（调号）、`bpm`、`note`、`rest`、`pitch-mod`、`duration-mod`、`bracket`、`chord`。
+将文本切分为语法高亮用的词法单元（按源位置升序、互不重叠）。类型见 `TokenType`：`key`（调号）、`bpm`、`note`、`rest`、`pitch-mod`、`duration-mod`、`bracket`、`chord`、`comment`。
 
 ```ts
 interface Token {
@@ -122,6 +123,10 @@ interface Token {
 ### `activeNotesAt(score: DapumeScore, timeMs: number): DapumeNote[]`
 
 返回在给定时刻正在发声的所有音符，常用于播放时高亮当前音符/和弦。
+
+### `activeEventsAt(score: DapumeScore, timeMs: number): DapumeEvent[]`
+
+返回给定时刻的全部时间轴事件，包含休止符，适合驱动编辑器高亮和播放导航。
 
 ### `paramsAt(score: DapumeScore, timeMs: number): DapumeSection`
 
@@ -163,6 +168,15 @@ interface Token {
 - 时值后缀可组合，如 3 拍写作 `~~` 或 `=-`。
 
 示例：`1`（0.5 拍 do）、`5-`（1 拍 sol）、`1.-`（1 拍高八度 do）、`1=*`（2.5 拍 do）。
+
+### 注释
+
+双斜杠 `//` 后直到当前行末尾的内容都是注释，解析与播放时会被忽略。注释可写在参数行或音符行末尾：
+
+```text
+1=C 120bpm // C 大调
+1234       // 第一乐句
+```
 
 ### 多轨演奏
 

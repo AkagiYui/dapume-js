@@ -15,7 +15,7 @@ const DURATION_MODS = new Set(['-', '~', '=', '+', '*', '^', "'"]);
 
 /**
  * 对 dapume 文本分词，返回用于语法高亮的词法单元数组（按源位置升序，互不重叠）。
- * 仅产出「有意义」的单元；空白、小节线 `/` 等被忽略的字符不会生成单元。
+ * 仅产出「有意义」的单元；空白与未知字符不会生成单元。
  *
  * @param text dapume 语法文本。
  */
@@ -25,8 +25,10 @@ export function tokenize(text: string): Token[] {
   let lineStart = 0;
 
   for (const line of lines) {
-    const km = line.match(RE_PATTERN_KEY_SIGNATURE);
-    const bm = line.match(RE_PATTERN_BPM);
+    const commentAt = line.indexOf('//');
+    const code = commentAt < 0 ? line : line.slice(0, commentAt);
+    const km = code.match(RE_PATTERN_KEY_SIGNATURE);
+    const bm = code.match(RE_PATTERN_BPM);
     const isParamLine = km !== null || bm !== null;
 
     if (isParamLine) {
@@ -52,14 +54,14 @@ export function tokenize(text: string): Token[] {
     } else {
       // 音符行：逐字符扫描
       let j = 0;
-      while (j < line.length) {
-        const c = line[j]!;
+      while (j < code.length) {
+        const c = code[j]!;
         const abs = lineStart + j;
         if (c === '[') {
           // 和弦记号：整体作为一个单元，直到 ']'（含）或行尾
           let k = j + 1;
-          while (k < line.length && line[k] !== ']') k++;
-          const end = k < line.length ? k + 1 : line.length;
+          while (k < code.length && code[k] !== ']') k++;
+          const end = k < code.length ? k + 1 : code.length;
           tokens.push({
             type: 'chord',
             start: abs,
@@ -83,6 +85,15 @@ export function tokenize(text: string): Token[] {
         // 其它字符（空白、'/'、未知字符）不产出单元
         j++;
       }
+    }
+
+    if (commentAt >= 0) {
+      tokens.push({
+        type: 'comment',
+        start: lineStart + commentAt,
+        end: lineStart + line.length,
+        value: line.slice(commentAt),
+      });
     }
 
     lineStart += line.length + 1; // +1 为换行符

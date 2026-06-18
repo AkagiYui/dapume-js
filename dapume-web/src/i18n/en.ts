@@ -28,7 +28,7 @@ export const en: typeof zh = {
     browserDesc: 'With the MIDI bytes, trigger a download via a Blob:',
     moreTitle: 'More helpers',
     moreDesc:
-      'render() does parse + render in one step; tokenize() returns tokens for syntax highlighting; activeNotesAt() returns the notes sounding at a given time; paramsAt() returns the key & tempo in effect at a given time ({ key, bpm, tonic, startTime }).',
+      'render() does parse + render in one step; tokenize() returns syntax-highlighting tokens; activeNotesAt() returns sounding notes; activeEventsAt() also includes the current rest; paramsAt() returns the key and tempo in effect.',
     typesTitle: 'Types at a glance',
     vscodeTitle: 'VSCode extension',
     vscodeDesc:
@@ -157,6 +157,8 @@ export const en: typeof zh = {
     clear: 'Clear',
     notes: 'Note count',
     tracks: 'Tracks',
+    key: 'Key',
+    tempo: 'Tempo',
     duration: 'Duration',
     playingLocked: 'Playing — editing is locked',
     quickRef: 'Quick reference',

@@ -113,6 +113,32 @@ describe('休止符', () => {
     // 仅 1、2、3 三个音符；0 被过滤，但仍占用时间
     expect(withRest.notes.map((n) => n.pitch)).toEqual([60, 62, 64]);
     expect(withRest.notes.map((n) => n.startTime)).toEqual([0, 500, 1000]);
+    expect(withRest.events.map((e) => e.isRest)).toEqual([false, true, false, true, false]);
+    expect(withRest.events.filter((e) => e.isRest).map((e) => [e.startTime, e.srcStart, e.srcEnd])).toEqual([
+      [250, 5, 6],
+      [750, 7, 8],
+    ]);
+  });
+
+  it('末尾休止符计入乐谱总时长', () => {
+    const score = parse('1=C\n10-');
+    expect(score.notes).toHaveLength(1);
+    expect(score.events).toHaveLength(2);
+    expect(score.durationMs).toBe(750);
+  });
+});
+
+describe('行尾注释', () => {
+  it('忽略 // 到行尾且保留之前的源码位置', () => {
+    const score = parse('1=C 120bpm // 参数说明\n12 // 这里的 345 不演奏\n3');
+    expect(score.notes.map((n) => n.pitch)).toEqual([60, 62, 64]);
+    expect(score.notes.map((n) => n.srcStart)).toEqual([19, 20, 37]);
+  });
+
+  it('注释中的参数不会生效', () => {
+    const score = parse('1=C 120bpm\n1 // 1=G 30bpm\n1');
+    expect(score.notes.map((n) => n.pitch)).toEqual([60, 60]);
+    expect(score.notes.map((n) => n.startTime)).toEqual([0, 250]);
   });
 });
 
@@ -162,6 +188,7 @@ describe('健壮性', () => {
   it('空字符串不抛异常', () => {
     const score = parse('');
     expect(score.notes).toEqual([]);
+    expect(score.events).toEqual([]);
     expect(score.trackCount).toBe(0);
     expect(score.durationMs).toBe(0);
   });

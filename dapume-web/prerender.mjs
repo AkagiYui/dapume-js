@@ -11,7 +11,7 @@
 import { build } from 'vite';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const dist = join(root, 'dist');
@@ -31,7 +31,7 @@ await build({
   },
 });
 
-const { renderPage, ROUTES } = await import(join(ssrDir, 'entry-server.js'));
+const { renderPage, ROUTES } = await import(pathToFileURL(join(ssrDir, 'entry-server.js')).href);
 
 // 2) 以客户端构建好的 dist/index.html 作为模板（已含 Vite 注入的 script/css 标签）
 // 注：图标注册脚本的执行顺序已由 vite-plugin-iconify-offline ≥0.4.2 在 build 模式

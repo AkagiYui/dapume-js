@@ -4,7 +4,7 @@
 
 | 包 | 说明 |
 | :-- | :-- |
-| [`dapume-js`](./dapume-js) | TypeScript 库：将 dapume 文本解析为乐谱对象（`parse`）、渲染为 MIDI（`toMidi`），另有 `render` / `tokenize` / `activeNotesAt` / `paramsAt`。Python 项目 `dapume`（dapume-py）的完美复刻，零依赖，可在 Node 与浏览器运行。已发布到 npm。 |
+| [`dapume-js`](./dapume-js) | TypeScript 库：将 dapume 文本解析为乐谱对象（`parse`）、渲染为 MIDI（`toMidi`），另有 `render` / `tokenize` / `activeNotesAt` / `activeEventsAt` / `paramsAt`。Python 项目 `dapume`（dapume-py）的 TypeScript 实现，零依赖，可在 Node 与浏览器运行。已发布到 npm。 |
 | [`dapume-web`](./dapume-web) | 基于 `dapume-js` 的 **SolidJS + Vite 8** 纯前端应用：指南 / 工作台 / 开发者三个页面，在线编辑、播放（smplr 真实音色）与导出。TanStack Router（history 路由），首页与开发者页 **SSG 预渲染**，构建为纯静态文件。 |
 | [`dapume-vscode`](./dapume-vscode) | VSCode 扩展：`.dapume` 文件语法高亮 + 编辑器标题栏「渲染为 MIDI」按钮（内部调用 dapume-js）。 |
 

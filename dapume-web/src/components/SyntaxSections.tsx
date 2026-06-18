@@ -3,7 +3,7 @@
  * 由「规则与语法」(Guide) 与「教程」(Tutorial) 两页共用。
  */
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { activeNotesAt, parse } from 'dapume-js';
+import { activeEventsAt, parse } from 'dapume-js';
 import type { GuideSection } from '~/data/guide';
 import { locale } from '~/stores/settings';
 import { currentTimeMs, isPlaying, play, stop } from '~/stores/player';
@@ -21,7 +21,7 @@ function PlayableExample(props: { code: string; caption: string }) {
   const isThis = () => playingSnippet() === props.code && isPlaying();
   const ranges = createMemo(() =>
     isThis()
-      ? activeNotesAt(score(), currentTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }))
+      ? activeEventsAt(score(), currentTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }))
       : [],
   );
   function toggle() {

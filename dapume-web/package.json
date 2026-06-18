@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.112",
+    "@iconify-json/mdi": "^1.2.3",
     "@types/qrcode": "^1.5.5",
     "@kobalte/tailwindcss": "^0.9.0",
     "@tailwindcss/vite": "^4.1.4",

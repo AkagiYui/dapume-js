@@ -4,6 +4,11 @@
   "scopeName": "source.dapume",
   "patterns": [
     {
+      "comment": "双斜杠到行尾的注释",
+      "match": "//.*$",
+      "name": "comment.line.double-slash.dapume"
+    },
+    {
       "comment": "调号参数，如 1=C、1=Bb.",
       "match": "1=[CDEFGAB][#b.,]*",
       "name": "entity.name.function.key.dapume"

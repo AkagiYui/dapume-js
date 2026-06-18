@@ -79,12 +79,13 @@ const MORE = (l: Locale) => {
         active: 'notes sounding at 300ms',
         params: 'key/tempo in effect at 300ms → "D", 90',
       };
-  return `import { parse, render, tokenize, activeNotesAt, paramsAt } from 'dapume-js';
+  return `import { parse, render, tokenize, activeNotesAt, activeEventsAt, paramsAt } from 'dapume-js';
 
 const mid = render('1=C\\n1234567');          // ${c.render}
 const tokens = tokenize('1=C\\n[4M7]2');        // ${c.tok}
 const score = parse('1=D 90bpm\\n1234567');
 const sounding = activeNotesAt(score, 300);     // ${c.active}
+const timeline = activeEventsAt(score, 300);    // includes rests
 const { key, bpm } = paramsAt(score, 300);      // ${c.params}`;
 };
 
@@ -93,6 +94,7 @@ const TYPES = (l: Locale) => {
   return `interface DapumeScore {
   tracks: DapumeNote[][];     // ${z ? '按音轨分组（渲染 MIDI 用）' : 'grouped by track (for MIDI)'}
   notes: DapumeNote[];        // ${z ? '扁平列表，按开始时刻升序' : 'flat list, sorted by start time'}
+  events: DapumeEvent[];      // ${z ? '时间轴事件（含休止符）' : 'timeline events (including rests)'}
   trackCount: number;
   durationMs: number;
   sections: DapumeSection[];  // ${z ? '各参数段（调号/速度随时间变化）' : 'parameter sections (key/tempo over time)'}

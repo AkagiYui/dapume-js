@@ -7,7 +7,7 @@
  *   （真实速度；多段变速也逐段写入对应 tempo）。
  * - 其后每条乐谱音轨各为一条 MTrk：program_change(0) + note_on/note_off + end_of_track。
  * - 音符位置由「音乐时间」换算为 tick：先按生效 bpm 把毫秒折算为拍，再乘 PPQ。
- *   因此小节/拍线对齐、速度准确（不再用「把毫秒直接当作 tick」的近似）。
+ *   因此拍点对齐、速度准确（不再用「把毫秒直接当作 tick」的近似）。
  */
 
 import { DEFAULT_BPM, DEFAULT_TONIC } from './constants';

@@ -2,7 +2,7 @@
  * 分词器与便捷 API 测试。
  */
 import { describe, expect, it } from 'vitest';
-import { activeNotesAt, parse, tokenize } from '../src/index';
+import { activeEventsAt, activeNotesAt, parse, tokenize } from '../src/index';
 
 describe('tokenize 语法分词', () => {
   it('识别参数行的调号与速度', () => {
@@ -32,6 +32,17 @@ describe('tokenize 语法分词', () => {
     const chord = tokens.find((t) => t.type === 'chord');
     expect(chord).toEqual({ type: 'chord', start: 4, end: 9, value: '[4M7]' });
   });
+
+  it('识别 // 行尾注释并停止解析其中内容', () => {
+    const tokens = tokenize('12 // 345\n1=C // 90bpm');
+    expect(tokens.map((t) => [t.type, t.value])).toEqual([
+      ['note', '1'],
+      ['note', '2'],
+      ['comment', '// 345'],
+      ['key', '1=C'],
+      ['comment', '// 90bpm'],
+    ]);
+  });
 });
 
 describe('activeNotesAt', () => {
@@ -40,6 +51,13 @@ describe('activeNotesAt', () => {
     // t=300ms 时，第二个音符（62，250~500ms）正在发声
     const active = activeNotesAt(score, 300);
     expect(active.map((n) => n.pitch)).toEqual([62]);
+  });
+
+  it('activeEventsAt 会返回当前休止符', () => {
+    const score = parse('1=C 120bpm\n10-2');
+    const active = activeEventsAt(score, 400);
+    expect(active).toHaveLength(1);
+    expect(active[0]).toMatchObject({ isRest: true, pitch: null, srcStart: 12, srcEnd: 14 });
   });
 
   it('和弦与旋律同时发声', () => {
