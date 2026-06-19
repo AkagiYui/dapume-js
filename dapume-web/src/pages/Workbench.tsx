@@ -187,8 +187,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [pianoKbFlip, setPianoKbFlip] = createSignal(lsGet('dapume.pianoKbFlip', 'false') === 'true');
   createEffect(() => lsSet('dapume.pianoKbFlip', String(pianoKbFlip())));
   // 判定线位置：OFF=悬在音符区 40% 处；ON=固定在琴键与音符区交接处（默认贴键盘）
-  const [pianoJudgeKb, setPianoJudgeKb] = createSignal(lsGet('dapume.pianoJudgeKb', 'true') === 'true');
-  createEffect(() => lsSet('dapume.pianoJudgeKb', String(pianoJudgeKb())));
+  const [pianoFloatJudge, setPianoFloatJudge] = createSignal(
+    lsGet('dapume.pianoFloatJudge', 'false') === 'true',
+  );
+  createEffect(() => lsSet('dapume.pianoFloatJudge', String(pianoFloatJudge())));
   // 编辑器与卷帘并排（宽屏左右布局）：OFF=卷帘在底部；ON=编辑器 | 卷帘（默认并排）
   const [pianoCenter, setPianoCenter] = createSignal(lsGet('dapume.pianoCenter', 'true') === 'true');
   createEffect(() => lsSet('dapume.pianoCenter', String(pianoCenter())));
@@ -943,7 +945,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         pitchAscending={pianoAsc()}
         orientation={pianoVertical() ? 'vertical' : 'horizontal'}
         keyboardFlip={pianoKbFlip()}
-        judgeAtKeyboard={pianoJudgeKb()}
+        floatingJudge={pianoFloatJudge()}
         onSeek={jumpTo}
       />
     </Show>
@@ -1008,8 +1010,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           label={t('workbench.pianoKeyboardPos')}
         />
         <MiniSwitch
-          checked={pianoJudgeKb()}
-          onChange={setPianoJudgeKb}
+          checked={pianoFloatJudge()}
+          onChange={setPianoFloatJudge}
           icon="lucide:scan-line"
           rotate={!pianoVertical()}
           label={t('workbench.pianoJudgeLine')}

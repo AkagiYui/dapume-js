@@ -31,10 +31,10 @@ export interface PianoRollProps {
    */
   keyboardFlip?: boolean;
   /**
-   * 判定线（播放指针）位置。false（默认）：判定线悬在音符区约 40% 处，已演奏的音符仍可见；
-   * true：判定线固定在琴键与音符区的交接处，音符流向交接处「落键」（仅显示未演奏音符）。
+   * 判定线（播放指针）位置 / 琴键显隐。false（默认）：显示琴键，音符流向琴键交接处「落键」；
+   * true：隐藏琴键、铺满音符瀑布，判定线悬在音符区约 40% 处，已演奏的音符继续流过仍可见。
    */
-  judgeAtKeyboard?: boolean;
+  floatingJudge?: boolean;
   /** 点击卷帘时间轴时跳转到对应毫秒位置。 */
   onSeek?: (timeMs: number) => void;
 }
@@ -163,6 +163,9 @@ export function PianoRoll(props: PianoRollProps) {
     const highAtCoord0 = vertical ? !!props.pitchAscending : !props.pitchAscending;
     // 键盘是否在时间轴起点（横向=左、纵向=顶）：纵向时与开关同向、横向时相反
     const kbAtStart = vertical ? !!props.keyboardFlip : !props.keyboardFlip;
+    // 悬浮判定线模式：隐藏琴键、瀑布铺满整条时间轴。
+    const floating = !!props.floatingJudge;
+    const showKeyboard = !floating;
 
     const { lo, hi } = pitchRange();
     const timeAxisLen = vertical ? cssH : cssW; // 时间轴总长（含键盘）
@@ -175,13 +178,14 @@ export function PianoRoll(props: PianoRollProps) {
       const start = highAtCoord0 ? pitchAxisLen - (index + 1) * cell : index * cell;
       return { start, length: cell };
     };
-    const noteAreaTime = timeAxisLen - KEYBOARD_W; // 时间轴上音符区长度
+    const keyboardW = showKeyboard ? KEYBOARD_W : 0; // 隐藏键盘时瀑布占满整条时间轴
+    const noteAreaTime = timeAxisLen - keyboardW; // 时间轴上音符区长度
 
-    const naLo = kbAtStart ? KEYBOARD_W : 0; // 音符区时间坐标下界
+    const naLo = kbAtStart ? keyboardW : 0; // 音符区时间坐标下界
     const naHi = naLo + noteAreaTime; // 上界
     const keyBodyStart = kbAtStart ? 0 : naHi; // 琴键紧贴瀑布，不留悬空缝隙
     const keyBodyLen = KEYBOARD_W;
-    const kbBorder = kbAtStart ? KEYBOARD_W : naHi; // 键盘与音符区的分隔线
+    const kbBorder = kbAtStart ? keyboardW : naHi; // 键盘与音符区的分隔线
 
     const visibleMs = noteAreaTime / pxPerMs;
     const maxScroll = Math.max(0, props.durationMs - visibleMs);
@@ -190,8 +194,13 @@ export function PianoRoll(props: PianoRollProps) {
     const autoFollow = props.follow && props.isPlaying;
     let scrollX: number;
     if (autoFollow) {
-      // 跟随播放时，当前音符始终落在琴键交接处；末尾继续滚动，直到最后一个音落键。
-      scrollX = Math.max(0, props.currentTimeMs);
+      if (floating) {
+        // 悬浮判定线：当前音符停在音符区约 40% 处，已演奏音符继续向远端流过、仍可见。
+        scrollX = clamp(props.currentTimeMs - visibleMs * 0.4, 0, maxScroll);
+      } else {
+        // 贴键盘：当前音符落在琴键交接处；末尾继续滚动，直到最后一个音落键。
+        scrollX = Math.max(0, props.currentTimeMs);
+      }
       userScrollX = scrollX;
     } else {
       scrollX = clamp(userScrollX, 0, maxScroll);
@@ -312,109 +321,112 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
-    // 扁平键盘：每个半音与卷帘等宽；黑键只在时间轴方向缩短，不再绘制拟物倒角。
-    ctx.fillStyle = bg;
-    fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
-    const blackKeyLen = keyBodyLen * 0.62;
-    const blackKeyStart = kbAtStart ? keyBodyStart + keyBodyLen - blackKeyLen : keyBodyStart;
-    const whiteFill = bg;
-    const whiteBorder = border;
+    // 悬浮判定线模式隐藏琴键、铺满瀑布；否则绘制扁平键盘。
+    if (showKeyboard) {
+      // 扁平键盘：每个半音与卷帘等宽；黑键只在时间轴方向缩短，不再绘制拟物倒角。
+      ctx.fillStyle = bg;
+      fillRect(kbAtStart ? 0 : naHi, KEYBOARD_W, 0, pitchAxisLen);
+      const blackKeyLen = keyBodyLen * 0.62;
+      const blackKeyStart = kbAtStart ? keyBodyStart + keyBodyLen - blackKeyLen : keyBodyStart;
+      const whiteFill = bg;
+      const whiteBorder = border;
 
-    // 现实键盘的七个白键前端等宽；黑键并不要求正压在白键前端缝隙的中心。
-    // 后段在有黑键的一侧收至黑键中心，无黑键的 E/F、B/C 则沿前端缝隙直通到底。
-    for (let p = lo; p <= hi; p++) {
-      if (isBlackKey(p)) continue;
-      const lane = pitchRect(p);
-      const octaveBase = Math.floor(p / 12) * 12;
-      const octaveFirst = pitchRect(octaveBase);
-      const octaveLast = pitchRect(octaveBase + 11);
-      const octaveStart = Math.min(octaveFirst.start, octaveLast.start);
-      const octaveEnd = Math.max(
-        octaveFirst.start + octaveFirst.length,
-        octaveLast.start + octaveLast.length,
-      );
-      const whiteIndex = WHITE_KEY_INDEX.get(((p % 12) + 12) % 12) ?? 0;
-      const coordinateIndex = highAtCoord0 ? 6 - whiteIndex : whiteIndex;
-      const whiteFrontWidth = (octaveEnd - octaveStart) / 7;
-      const wideStart = octaveStart + coordinateIndex * whiteFrontWidth;
-      const wideEnd = wideStart + whiteFrontWidth;
-      let narrowStart = wideStart;
-      let narrowEnd = wideEnd;
-      for (const neighborPitch of [p - 1, p + 1]) {
-        if (!isBlackKey(neighborPitch)) continue;
-        const neighbor = pitchRect(neighborPitch);
-        const middle = neighbor.start + neighbor.length / 2;
-        if (middle < (wideStart + wideEnd) / 2) narrowStart = middle;
-        else narrowEnd = middle;
-      }
-      const pressFill = activePitchColor.get(p);
-      const pressed = pressFill !== undefined;
-      ctx.fillStyle = pressed ? pressFill : whiteFill;
-      ctx.strokeStyle = whiteBorder;
-      ctx.lineWidth = 1;
-      const keyEnd = keyBodyStart + keyBodyLen;
-      const shoulder = kbAtStart ? blackKeyStart : blackKeyStart + blackKeyLen;
-      const points = kbAtStart
-        ? [
-            { t: keyBodyStart + 0.5, p: wideStart + 0.5 },
-            { t: shoulder, p: wideStart + 0.5 },
-            { t: shoulder, p: narrowStart + 0.5 },
-            { t: keyEnd - 0.5, p: narrowStart + 0.5 },
-            { t: keyEnd - 0.5, p: narrowEnd - 0.5 },
-            { t: shoulder, p: narrowEnd - 0.5 },
-            { t: shoulder, p: wideEnd - 0.5 },
-            { t: keyBodyStart + 0.5, p: wideEnd - 0.5 },
-          ]
-        : [
-            { t: keyBodyStart + 0.5, p: narrowStart + 0.5 },
-            { t: shoulder, p: narrowStart + 0.5 },
-            { t: shoulder, p: wideStart + 0.5 },
-            { t: keyEnd - 0.5, p: wideStart + 0.5 },
-            { t: keyEnd - 0.5, p: wideEnd - 0.5 },
-            { t: shoulder, p: wideEnd - 0.5 },
-            { t: shoulder, p: narrowEnd - 0.5 },
-            { t: keyBodyStart + 0.5, p: narrowEnd - 0.5 },
-          ];
-      drawLogicalPolygon(points);
+      // 现实键盘的七个白键前端等宽；黑键并不要求正压在白键前端缝隙的中心。
+      // 后段在有黑键的一侧收至黑键中心，无黑键的 E/F、B/C 则沿前端缝隙直通到底。
+      for (let p = lo; p <= hi; p++) {
+        if (isBlackKey(p)) continue;
+        const lane = pitchRect(p);
+        const octaveBase = Math.floor(p / 12) * 12;
+        const octaveFirst = pitchRect(octaveBase);
+        const octaveLast = pitchRect(octaveBase + 11);
+        const octaveStart = Math.min(octaveFirst.start, octaveLast.start);
+        const octaveEnd = Math.max(
+          octaveFirst.start + octaveFirst.length,
+          octaveLast.start + octaveLast.length,
+        );
+        const whiteIndex = WHITE_KEY_INDEX.get(((p % 12) + 12) % 12) ?? 0;
+        const coordinateIndex = highAtCoord0 ? 6 - whiteIndex : whiteIndex;
+        const whiteFrontWidth = (octaveEnd - octaveStart) / 7;
+        const wideStart = octaveStart + coordinateIndex * whiteFrontWidth;
+        const wideEnd = wideStart + whiteFrontWidth;
+        let narrowStart = wideStart;
+        let narrowEnd = wideEnd;
+        for (const neighborPitch of [p - 1, p + 1]) {
+          if (!isBlackKey(neighborPitch)) continue;
+          const neighbor = pitchRect(neighborPitch);
+          const middle = neighbor.start + neighbor.length / 2;
+          if (middle < (wideStart + wideEnd) / 2) narrowStart = middle;
+          else narrowEnd = middle;
+        }
+        const pressFill = activePitchColor.get(p);
+        const pressed = pressFill !== undefined;
+        ctx.fillStyle = pressed ? pressFill : whiteFill;
+        ctx.strokeStyle = whiteBorder;
+        ctx.lineWidth = 1;
+        const keyEnd = keyBodyStart + keyBodyLen;
+        const shoulder = kbAtStart ? blackKeyStart : blackKeyStart + blackKeyLen;
+        const points = kbAtStart
+          ? [
+              { t: keyBodyStart + 0.5, p: wideStart + 0.5 },
+              { t: shoulder, p: wideStart + 0.5 },
+              { t: shoulder, p: narrowStart + 0.5 },
+              { t: keyEnd - 0.5, p: narrowStart + 0.5 },
+              { t: keyEnd - 0.5, p: narrowEnd - 0.5 },
+              { t: shoulder, p: narrowEnd - 0.5 },
+              { t: shoulder, p: wideEnd - 0.5 },
+              { t: keyBodyStart + 0.5, p: wideEnd - 0.5 },
+            ]
+          : [
+              { t: keyBodyStart + 0.5, p: narrowStart + 0.5 },
+              { t: shoulder, p: narrowStart + 0.5 },
+              { t: shoulder, p: wideStart + 0.5 },
+              { t: keyEnd - 0.5, p: wideStart + 0.5 },
+              { t: keyEnd - 0.5, p: wideEnd - 0.5 },
+              { t: shoulder, p: wideEnd - 0.5 },
+              { t: shoulder, p: narrowEnd - 0.5 },
+              { t: keyBodyStart + 0.5, p: narrowEnd - 0.5 },
+            ];
+        drawLogicalPolygon(points);
 
-      if (p % 12 === 0) {
-        ctx.fillStyle = pressed ? primaryFg : '#77746d';
-        ctx.font = '9px ui-sans-serif, system-ui';
-        const label = `C${Math.floor(p / 12) - 1}`;
-        if (vertical) {
-          const ly = kbAtStart ? keyBodyStart + 9 : keyBodyStart + keyBodyLen - 3;
-          ctx.fillText(label, lane.start + 2, ly);
-        } else {
-          ctx.textAlign = kbAtStart ? 'left' : 'right';
-          ctx.fillText(
-            label,
-            kbAtStart ? keyBodyStart + 2 : keyBodyStart + keyBodyLen - 2,
-            lane.start + lane.length - 2,
-          );
-          ctx.textAlign = 'left';
+        if (p % 12 === 0) {
+          ctx.fillStyle = pressed ? primaryFg : '#77746d';
+          ctx.font = '9px ui-sans-serif, system-ui';
+          const label = `C${Math.floor(p / 12) - 1}`;
+          if (vertical) {
+            const ly = kbAtStart ? keyBodyStart + 9 : keyBodyStart + keyBodyLen - 3;
+            ctx.fillText(label, lane.start + 2, ly);
+          } else {
+            ctx.textAlign = kbAtStart ? 'left' : 'right';
+            ctx.fillText(
+              label,
+              kbAtStart ? keyBodyStart + 2 : keyBodyStart + keyBodyLen - 2,
+              lane.start + lane.length - 2,
+            );
+            ctx.textAlign = 'left';
+          }
         }
       }
-    }
 
-    // 黑键保持纯色平面；音高轴宽度与白键、瀑布音符完全一致。
-    for (let p = lo; p <= hi; p++) {
-      if (!isBlackKey(p)) continue;
-      const lane = pitchRect(p);
-      const pressFill = activePitchColor.get(p);
-      ctx.fillStyle = pressFill ?? fg;
-      fillRect(blackKeyStart, blackKeyLen, lane.start, lane.length);
+      // 黑键保持纯色平面；音高轴宽度与白键、瀑布音符完全一致。
+      for (let p = lo; p <= hi; p++) {
+        if (!isBlackKey(p)) continue;
+        const lane = pitchRect(p);
+        const pressFill = activePitchColor.get(p);
+        ctx.fillStyle = pressFill ?? fg;
+        fillRect(blackKeyStart, blackKeyLen, lane.start, lane.length);
+        ctx.strokeStyle = border;
+        ctx.lineWidth = 1;
+        strokeRect(blackKeyStart + 0.5, blackKeyLen - 1, lane.start + 0.5, lane.length - 1);
+      }
+      // 键盘与音符区的分隔线
       ctx.strokeStyle = border;
       ctx.lineWidth = 1;
-      strokeRect(blackKeyStart + 0.5, blackKeyLen - 1, lane.start + 0.5, lane.length - 1);
+      lineAcrossPitch(kbBorder);
     }
-    // 键盘与音符区的分隔线
-    ctx.strokeStyle = border;
-    ctx.lineWidth = 1;
-    lineAcrossPitch(kbBorder);
 
-    // 跟随播放时，音符已直接落到琴键上，不再额外叠一条蓝色判定线。
+    // 判定线：悬浮模式下始终画（音符流经它）；贴键盘模式仅在非跟随时画指针（跟随时音符已落键）。
     const tc = tPos(props.currentTimeMs);
-    if (!autoFollow && tc >= naLo && tc <= naHi) {
+    if ((floating || !autoFollow) && tc >= naLo && tc <= naHi) {
       ctx.strokeStyle = primary;
       ctx.lineWidth = 2;
       lineAcrossPitch(tc);
@@ -555,7 +567,7 @@ export function PianoRoll(props: PianoRollProps) {
     void props.orientation; // 卷帘朝向切换后重绘
     void props.pitchAscending; // 音高方向切换后重绘
     void props.keyboardFlip; // 键盘位置切换后重绘
-    void props.judgeAtKeyboard; // 判定线位置切换后重绘
+    void props.floatingJudge; // 判定线位置 / 琴键显隐切换后重绘
     void isDark(); // 深浅色切换后重绘，使画布配色同步更新
     void themeColor(); // 主题色切换后重绘（播放指针颜色）
     draw();
