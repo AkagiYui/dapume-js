@@ -33,3 +33,24 @@ jobs:
 
       - name: Test
         run: pnpm -r test
+
+  # 开源代码（含被社区站复用的 dapume-js / dapume-web-ui）合入 master 且 CI 通过后，
+  # 触发闭源社区站（dapu.me）的 Cloudflare Workers 重新构建部署：
+  #   社区站构建命令含 `git submodule update --init --remote`，会拉取本仓 master 最新源码。
+  # 需在本仓 Secrets 配置 COMMUNITY_DEPLOY_HOOK（社区 Worker 的 Deploy Hook URL，绑定 master 分支）：
+  #   Cloudflare → Workers & Pages → dapume-js-workshop → Settings → Builds → Deploy Hooks。
+  # 未配置该 secret 时本步骤自动跳过，不影响 CI。
+  deploy-community:
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger dapu.me (community) rebuild
+        env:
+          HOOK: ${{ secrets.COMMUNITY_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "COMMUNITY_DEPLOY_HOOK 未配置，跳过社区站部署触发。"
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" && echo "已触发社区站（dapu.me）重新构建部署。"
