@@ -45,7 +45,6 @@ import { locale } from '~/stores/settings';
 import {
   currentTimeMs,
   ensurePiano,
-  getPausedAt,
   isPlaying,
   loadProgress,
   pause,
@@ -246,9 +245,11 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   // 0ms 也是一个有效的定位状态；单独记录用户选中的源码行，避免把“第 1 行”误判为未定位。
   const [selectedPlaybackLine, setSelectedPlaybackLine] = createSignal<number | null>(null);
+  const [playheadPositioned, setPlayheadPositioned] = createSignal(false);
 
   function stopPlayback() {
     setSelectedPlaybackLine(null);
+    setPlayheadPositioned(false);
     stop();
   }
 
@@ -266,7 +267,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   // 「播放态」：正在播放，或已暂停（currentTimeMs > 0）。暂停时仍保留高亮与实时调号/速度。
   const playActive = createMemo(
-    () => isPlaying() || currentTimeMs() > 0 || selectedPlaybackLine() !== null,
+    () => isPlaying() || currentTimeMs() > 0 || playheadPositioned(),
   );
 
   // 视觉时间 = 播放时间 - 延迟：卷帘与高亮整体延后，与无线耳机听到的声音对齐
@@ -330,24 +331,40 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 播放/暂停时高亮当前时间轴事件对应的源字符（含休止符，用视觉时间）
   const highlights = createMemo(() => {
     if (!playActive()) return [];
-    const selectedLine = selectedPlaybackLine();
     return activeEventsAt(score(), visualTimeMs())
-      .filter((event) => selectedLine === null || sourceLineAt(event.srcStart) === selectedLine)
       .map((event) => ({ from: event.srcStart, to: event.srcEnd }));
+  });
+
+  // 用户点击某条并行音轨时，仍高亮当前时刻的全部音轨；显式行只用于补上无事件的参数首行。
+  const playingLines = createMemo<number[] | undefined>(() => {
+    const selectedLine = selectedPlaybackLine();
+    if (selectedLine === null) return undefined;
+    const lines = new Set<number>([selectedLine]);
+    for (const event of activeEventsAt(score(), visualTimeMs())) {
+      lines.add(sourceLineAt(event.srcStart));
+    }
+    return [...lines].sort((a, b) => a - b);
   });
 
   // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示，用视觉时间）
   const liveParams = createMemo(() => paramsAt(score(), visualTimeMs()));
 
+  /** 明确以 UI 当前进度为起点播放，避免暂停位置缓存与点击定位状态不同步。 */
+  function playFromCurrentPosition() {
+    const s = score();
+    if (s.notes.length === 0) return;
+    const from = Math.max(0, Math.min(currentTimeMs(), s.durationMs));
+    setPlayheadPositioned(true);
+    setSelectedPlaybackLine(null);
+    seek(from);
+    void play(s.notes, s.durationMs, from);
+  }
+
   function onPlayPause() {
     if (isPlaying()) {
       pause();
     } else {
-      const s = score();
-      if (s.notes.length > 0) {
-        setSelectedPlaybackLine(null);
-        void play(s.notes, s.durationMs, getPausedAt());
-      }
+      playFromCurrentPosition();
     }
   }
 
@@ -358,6 +375,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     const resume = isPlaying();
     if (resume) pause();
     seek(target);
+    setPlayheadPositioned(true);
     setSelectedPlaybackLine(sourceLine);
     if (resume && s.notes.length > 0 && target < s.durationMs) {
       setSelectedPlaybackLine(null);
@@ -388,18 +406,14 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       .sort((a, b) => a.line - b.line);
   });
 
-  /** 所有非空源码行的定位目标；参数首行没有事件，但仍是合法的第一个导航位置。 */
-  const lineTargets = createMemo(() => {
-    const entries = lineEntries();
-    return scoreText()
-      .split('\n')
-      .map((text, index) => ({ text, line: index + 1 }))
-      .filter(({ text }) => text.trim().length > 0)
-      .map(({ line }) => {
-        const exact = entries.find((entry) => entry.line === line);
-        const next = entries.find((entry) => entry.line > line);
-        return { line, time: exact?.time ?? next?.time ?? entries.at(-1)?.time ?? 0 };
-      });
+  // 行导航按“行首时间”步进；并行音轨若同一时刻开始，只产生一个有效跳点。
+  const lineOnsetTimes = createMemo(() =>
+    [...new Set(lineEntries().map((entry) => entry.time))].sort((a, b) => a - b),
+  );
+
+  const firstNonEmptyLine = createMemo(() => {
+    const index = scoreText().split('\n').findIndex((line) => line.trim().length > 0);
+    return index < 0 ? 1 : index + 1;
   });
 
   /** 左侧 gutter 的自动小节号：同一 4/4 小节跨多行时，只标记第一条音乐行。 */
@@ -433,28 +447,30 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     seekPrev(onsetTimes());
   }
   function seekToNextLine() {
-    moveLine(1);
+    const firstMusicLine = lineEntries()[0]?.line;
+    // 参数首行与第一条音乐行同为 0ms；先从参数行进入第一组并行音轨，再按时间前进。
+    if (
+      selectedPlaybackLine() !== null &&
+      currentTimeMs() <= 1 &&
+      firstMusicLine !== undefined &&
+      selectedPlaybackLine()! < firstMusicLine
+    ) {
+      jumpTo(0);
+      return;
+    }
+    seekNext(lineOnsetTimes());
   }
   function seekToPrevLine() {
-    moveLine(-1);
-  }
-  function moveLine(direction: -1 | 1) {
-    const targets = lineTargets();
-    if (targets.length === 0) return;
-    let currentLine = selectedPlaybackLine();
-    if (currentLine === null) {
-      const activeLines = activeEventsAt(score(), currentTimeMs())
-        .map((event) => sourceLineAt(event.srcStart))
-        .sort((a, b) => a - b);
-      currentLine = activeLines[0] ?? targets[0]!.line;
+    const firstMusicLine = lineEntries()[0]?.line;
+    if (
+      currentTimeMs() <= 1 &&
+      firstMusicLine !== undefined &&
+      firstNonEmptyLine() < firstMusicLine
+    ) {
+      jumpTo(0, firstNonEmptyLine());
+      return;
     }
-    let index = targets.findIndex((target) => target.line === currentLine);
-    if (index < 0) {
-      index = targets.findLastIndex((target) => target.line < currentLine!);
-      if (index < 0) index = 0;
-    }
-    const target = targets[Math.max(0, Math.min(targets.length - 1, index + direction))]!;
-    jumpTo(target.time, target.line);
+    seekPrev(lineOnsetTimes());
   }
   function seekToLine(lineNumber: number) {
     const entries = lineEntries();
@@ -471,7 +487,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 裸方向键始终留给编辑器光标，避免乐谱导航与文本编辑争抢。
   const onPlaybackKey = (e: KeyboardEvent) => {
     const isArrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key);
-    if (e.code !== 'Space' && !isArrow) return;
+    const isSpace = e.code === 'Space' || e.key === ' ';
+    // Windows 中文输入法可能把 Ctrl+Space 报为 Process/229，而不是普通 Space。
+    const modifiedSpace =
+      (e.ctrlKey || e.metaKey) &&
+      (isSpace || e.key === 'Process' || e.keyCode === 32 || e.keyCode === 229);
+    if (!isSpace && !modifiedSpace && !isArrow) return;
     if (isArrow && !e.ctrlKey && !e.metaKey) return;
     const el = document.activeElement as HTMLElement | null;
     const tag = el?.tagName;
@@ -484,12 +505,21 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         el.getAttribute('role') === 'slider')
     )
       return;
-    const modifiedSpace = e.code === 'Space' && (e.ctrlKey || e.metaKey);
-    if (el?.isContentEditable && !isArrow && !modifiedSpace) return;
-    if (e.code === 'Space') {
+    // 编辑器内的 Ctrl+Space 由 CodeMirror 自身处理，避免全局捕获与编辑器快捷键互相覆盖。
+    if (el?.isContentEditable && modifiedSpace) return;
+    if (el?.isContentEditable && !isArrow) return;
+    if (isSpace || modifiedSpace) {
       if (score().notes.length === 0) return;
       e.preventDefault();
-      onPlayPause();
+      // Ctrl+Space 是明确的“从当前进度播放”；阻止编辑器/输入法继续消费同一次按键。
+      if (modifiedSpace) {
+        e.stopImmediatePropagation();
+        if (e.repeat) return;
+        if (isPlaying()) pause();
+        else playFromCurrentPosition();
+      } else {
+        onPlayPause();
+      }
       return;
     }
     if (score().events.length === 0) return;
@@ -565,14 +595,16 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       onChange={setScoreText}
       readOnly={isPlaying()}
       highlights={highlights()}
-      playingLines={
-        selectedPlaybackLine() === null ? undefined : [selectedPlaybackLine()!]
-      }
+      playingLines={playingLines()}
       keepVisible={keepLine() && playActive()}
       smoothScroll={smooth()}
       sticky={sticky()}
       measureNumbers={measureNumbers()}
       onLineClick={seekToLine}
+      onPlayShortcut={() => {
+        if (isPlaying()) pause();
+        else playFromCurrentPosition();
+      }}
       placeholder={'1=C 120bpm\n1234567'}
     />
   );

@@ -277,6 +277,8 @@ export interface CodeEditorProps {
   measureNumbers?: readonly (number | null)[];
   /** 点击某一行时通知上层，用于把播放进度定位到该行行首。 */
   onLineClick?: (lineNumber: number) => void;
+  /** 编辑器聚焦时按 Ctrl/⌘+Space，从当前播放位置开始播放。 */
+  onPlayShortcut?: () => void;
   placeholder?: string;
 }
 
@@ -313,6 +315,20 @@ export function CodeEditor(props: CodeEditorProps) {
             if (u.docChanged) props.onChange?.(u.state.doc.toString());
           }),
           EditorView.domEventHandlers({
+            keydown(event) {
+              const ctrlSpace =
+                (event.ctrlKey || event.metaKey) &&
+                (event.code === 'Space' ||
+                  event.key === ' ' ||
+                  event.key === 'Process' ||
+                  event.keyCode === 32 ||
+                  event.keyCode === 229);
+              if (!ctrlSpace || !props.onPlayShortcut) return false;
+              event.preventDefault();
+              event.stopPropagation();
+              if (!event.repeat) props.onPlayShortcut();
+              return true;
+            },
             mousedown(event, editor) {
               if (event.button !== 0 || !props.onLineClick) return false;
               const pos = editor.posAtCoords({ x: event.clientX, y: event.clientY });

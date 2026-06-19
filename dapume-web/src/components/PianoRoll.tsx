@@ -45,6 +45,15 @@ const KEYBOARD_W = 68;
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 /** 卷帘至少展示三个完整八度。 */
 const MIN_VISIBLE_SEMITONES = 36;
+const WHITE_KEY_INDEX = new Map([
+  [0, 0],
+  [2, 1],
+  [4, 2],
+  [5, 3],
+  [7, 4],
+  [9, 5],
+  [11, 6],
+]);
 
 function isBlackKey(pitch: number): boolean {
   return BLACK_KEYS.has(((pitch % 12) + 12) % 12);
@@ -311,21 +320,32 @@ export function PianoRoll(props: PianoRollProps) {
     const whiteFill = bg;
     const whiteBorder = border;
 
-    // 白键保持扁平配色和“窄后段 + 宽前段”轮廓。前段边界取相邻黑键的中心；
-    // E/F、B/C 之间没有黑键，前后两段便共用同一条直线，不会发生半键错位。
+    // 现实键盘的七个白键前端等宽；黑键并不要求正压在白键前端缝隙的中心。
+    // 后段在有黑键的一侧收至黑键中心，无黑键的 E/F、B/C 则沿前端缝隙直通到底。
     for (let p = lo; p <= hi; p++) {
       if (isBlackKey(p)) continue;
       const lane = pitchRect(p);
-      const narrowStart = lane.start;
-      const narrowEnd = lane.start + lane.length;
-      let wideStart = narrowStart;
-      let wideEnd = narrowEnd;
+      const octaveBase = Math.floor(p / 12) * 12;
+      const octaveFirst = pitchRect(octaveBase);
+      const octaveLast = pitchRect(octaveBase + 11);
+      const octaveStart = Math.min(octaveFirst.start, octaveLast.start);
+      const octaveEnd = Math.max(
+        octaveFirst.start + octaveFirst.length,
+        octaveLast.start + octaveLast.length,
+      );
+      const whiteIndex = WHITE_KEY_INDEX.get(((p % 12) + 12) % 12) ?? 0;
+      const coordinateIndex = highAtCoord0 ? 6 - whiteIndex : whiteIndex;
+      const whiteFrontWidth = (octaveEnd - octaveStart) / 7;
+      const wideStart = octaveStart + coordinateIndex * whiteFrontWidth;
+      const wideEnd = wideStart + whiteFrontWidth;
+      let narrowStart = wideStart;
+      let narrowEnd = wideEnd;
       for (const neighborPitch of [p - 1, p + 1]) {
         if (!isBlackKey(neighborPitch)) continue;
         const neighbor = pitchRect(neighborPitch);
         const middle = neighbor.start + neighbor.length / 2;
-        if (middle < narrowStart) wideStart = middle;
-        else if (middle > narrowEnd) wideEnd = middle;
+        if (middle < (wideStart + wideEnd) / 2) narrowStart = middle;
+        else narrowEnd = middle;
       }
       const pressFill = activePitchColor.get(p);
       const pressed = pressFill !== undefined;
