@@ -108,9 +108,12 @@ export default function ScoreManager() {
     }
   });
 
-  // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift
-  document.documentElement.classList.add('auto-gutter');
-  onCleanup(() => document.documentElement.classList.remove('auto-gutter'));
+  // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift。
+  // 放进 onMount 仅客户端执行，避免在 render 期访问 document，使本页可被 SSG/SSR（社区站会预渲染乐谱库）。
+  onMount(() => {
+    document.documentElement.classList.add('auto-gutter');
+    onCleanup(() => document.documentElement.classList.remove('auto-gutter'));
+  });
 
   onMount(async () => {
     await ensureSeeded(t('manager.untitled'));
