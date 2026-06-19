@@ -70,7 +70,9 @@ export default defineConfig({
     tanstackRouter({ target: 'solid', autoCodeSplitting: true }),
     solid(),
     tailwindcss(),
-    iconifyOffline(),
+    // 图标用法已迁入 dapume-web-ui（经 node_modules 解析），而本插件按文件系统扫描且跳过 node_modules，
+    // 故显式指向套件源码目录，确保图标仍被离线化（dapume-web 自身 src 已不含图标引用）。
+    iconifyOffline({ scanDir: '../dapume-web-ui/src' }),
     VitePWA({
       // 部署后自动更新 Service Worker（无需用户手动刷新即可拿到新版本）
       registerType: 'autoUpdate',
