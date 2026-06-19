@@ -1,0 +1,62 @@
+{
+  "name": "dapume-web-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "打谱么 Web 可复用套件 —— 外壳、5 个页面、编辑器/钢琴卷帘、播放与设置、i18n 与设计令牌，供 dapume-web 及社区站以源码方式复用。",
+  "sideEffects": ["**/*.css"],
+  "exports": {
+    ".": {
+      "solid": "./src/index.ts",
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./ui": {
+      "solid": "./src/components/ui/index.ts",
+      "types": "./src/components/ui/index.ts",
+      "import": "./src/components/ui/index.ts"
+    },
+    "./pages/*": {
+      "solid": "./src/pages/*.tsx",
+      "types": "./src/pages/*.tsx",
+      "import": "./src/pages/*.tsx"
+    },
+    "./styles.css": "./src/app.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.43.1",
+    "@corvu/resizable": "^0.2.5",
+    "@iconify-icon/solid": "^3.0.3",
+    "@kobalte/core": "^0.13.7",
+    "@solid-primitives/i18n": "^2.2.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dapume-js": "workspace:*",
+    "highlight.js": "^11.11.0",
+    "idb-keyval": "^6.2.1",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "smplr": "^1.0.0",
+    "tailwind-merge": "^2.6.0"
+  },
+  "peerDependencies": {
+    "@tanstack/solid-router": "^1.170.0",
+    "solid-js": "^1.9.13"
+  },
+  "devDependencies": {
+    "@tanstack/solid-router": "^1.170.0",
+    "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.5",
+    "jsdom": "^25.0.0",
+    "solid-js": "^1.9.13",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.8"
+  }
+}

@@ -2,5 +2,6 @@
 # 文档：https://pnpm.io/workspaces
 packages:
   - 'dapume-js'
+  - 'dapume-web-ui'
   - 'dapume-web'
   - 'dapume-vscode'

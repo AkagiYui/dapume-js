@@ -1,8 +1,7 @@
 /** 路由 `/workbench/$id` —— 编辑指定乐谱。 */
 import { Show, createEffect, createResource } from 'solid-js';
 import { createFileRoute, useNavigate } from '@tanstack/solid-router';
-import Workbench from '~/pages/Workbench';
-import { getScore } from '~/stores/scores';
+import { Workbench, getScore } from 'dapume-web-ui';
 
 export const Route = createFileRoute('/workbench/$id')({
   component: EditorRoute,

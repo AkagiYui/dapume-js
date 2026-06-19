@@ -1,9 +1,9 @@
 /** 应用入口：基于 TanStack Router（文件式路由 + history 模式）。 */
-import './app.css';
+import 'dapume-web-ui/styles.css';
 import { render } from 'solid-js/web';
 import { RouterProvider, createRouter } from '@tanstack/solid-router';
 import { routeTree } from './routeTree.gen';
-import { isStandalone, rememberPath, takeStartPath } from './lib/pwa';
+import { isStandalone, rememberPath, takeStartPath } from 'dapume-web-ui';
 
 // PWA 启动恢复：独立窗口下、当前在起始页(/)、且存在已保存的其它路径时，
 // 在创建路由前改写地址，使路由直接渲染上次访问的页面（无闪烁）。
@@ -67,12 +67,12 @@ if (root) {
     rememberPath(window.location.pathname + window.location.search);
   });
 
-  // 页面加载完成后，空闲时主动预加载各主要页面的代码块（不再仅在 hover 导航按钮时才预加载）。
-  // 直接 import 页面模块即可命中并缓存其分包，后续导航无需等待下载。
+  // 空闲时预取各页面分包，后续导航无需等待下载（页面已迁入 dapume-web-ui，按子路径分别预取，
+  // 与路由懒加载命中同一分包；用子路径而非整包 barrel，避免与路由的静态导入冲突）。
   const preloadPages = () => {
-    void import('./pages/Developers');
-    void import('./pages/ScoreManager');
-    void import('./pages/Workbench');
+    void import('dapume-web-ui/pages/Developers');
+    void import('dapume-web-ui/pages/ScoreManager');
+    void import('dapume-web-ui/pages/Workbench');
   };
   if ('requestIdleCallback' in window) {
     requestIdleCallback(preloadPages, { timeout: 3000 });

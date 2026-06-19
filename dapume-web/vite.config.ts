@@ -107,6 +107,13 @@ export default defineConfig({
     alias: {
       '~': fileURLToPath(new URL('./src', import.meta.url)),
     },
+    // 整个工作区只用一份 solid-js 实例（web-ui 以源码方式被复用，避免双实例破坏响应式/上下文）
+    dedupe: ['solid-js'],
+  },
+  // dapume-web-ui 以源码（.tsx）形式提供，必须走 vite-plugin-solid 编译，
+  // 不能被 esbuild 预打包（否则 Solid 的 JSX 不会被正确转换）。
+  optimizeDeps: {
+    exclude: ['dapume-web-ui'],
   },
   build: {
     outDir: 'dist',
