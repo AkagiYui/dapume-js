@@ -46,7 +46,7 @@ pnpm dev:web      # 启动 dapume-web 开发服务器
 
 ## 部署
 
-`dapume-web` 构建为纯静态文件，部署在 Cloudflare Pages（[https://dapu.me](https://dapu.me)）。构建命令 `pnpm run build`，输出目录 `dapume-web/dist`，根目录为仓库根。另在 `functions/` 下提供 Cloudflare Pages Functions（`/api/parse`、`/api/to-midi`、`/api/render`）。详见 [dapume-web 部署说明](./dapume-web/README.md#部署到-cloudflare-pages)。
+`dapume-web` 构建为纯静态文件，部署在 Cloudflare Pages（[https://docs.dapu.me](https://docs.dapu.me)；根域 [dapu.me](https://dapu.me) 现由独立的闭源社区仓库提供）。构建命令 `pnpm run build`，输出目录 `dapume-web/dist`，根目录为仓库根。另在 `functions/` 下提供 Cloudflare Pages Functions（`/api/parse`、`/api/to-midi`、`/api/render`）。详见 [dapume-web 部署说明](./dapume-web/README.md#部署到-cloudflare-pages)。
 
 ## 许可证
 
