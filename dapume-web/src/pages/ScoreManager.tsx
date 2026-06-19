@@ -3,7 +3,7 @@
  * 列出浏览器中（IndexedDB）的全部乐谱，可新建 / 打开 / 重命名 / 删除。
  * 提供「直接访问时自动打开上次乐谱」开关；点击乐谱进入 /workbench/{id} 编辑。
  */
-import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { parse } from 'dapume-js';
 import { SiteHeader } from '~/components/SiteHeader';
@@ -33,6 +33,30 @@ import { navigateWithTransition } from '~/lib/viewTransition';
 
 /** 新建乐谱的初始内容。 */
 const NEW_SCORE = '1=C 120bpm\n1234567';
+
+/** 排序方式：最近更新 / 名称 / 创建时间。默认按最近更新（与改版前一致）。 */
+type SortKey = 'recent' | 'name' | 'created';
+const SORT_OPTIONS = [
+  { key: 'recent', icon: 'lucide:history', labelKey: 'manager.sortRecent' },
+  { key: 'name', icon: 'lucide:arrow-down-a-z', labelKey: 'manager.sortName' },
+  { key: 'created', icon: 'lucide:calendar-plus', labelKey: 'manager.sortCreated' },
+] as const;
+function readSort(): SortKey {
+  try {
+    const v = localStorage.getItem('dapume.scoreSort');
+    if (v === 'name' || v === 'created' || v === 'recent') return v;
+  } catch {
+    /* 忽略 */
+  }
+  return 'recent';
+}
+function writeSort(v: SortKey): void {
+  try {
+    localStorage.setItem('dapume.scoreSort', v);
+  } catch {
+    /* 忽略 */
+  }
+}
 
 /** 毫秒 → m:ss。 */
 function fmt(ms: number): string {
@@ -65,6 +89,24 @@ export default function ScoreManager() {
   const navigate = useNavigate();
   const location = useLocation();
   const [ready, setReady] = createSignal(false);
+
+  // 排序方式（持久化）。在组件内按所选方式重排列表，store 仍以更新时间为底序。
+  const [sortBy, setSortBySignal] = createSignal<SortKey>(readSort());
+  function setSortBy(v: SortKey) {
+    setSortBySignal(v);
+    writeSort(v);
+  }
+  const sortedScores = createMemo(() => {
+    const list = [...scores()];
+    switch (sortBy()) {
+      case 'name':
+        return list.sort((a, b) => a.title.localeCompare(b.title, locale() === 'zh' ? 'zh' : 'en'));
+      case 'created':
+        return list.sort((a, b) => b.createdAt - a.createdAt);
+      default:
+        return list.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+  });
 
   // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift
   document.documentElement.classList.add('auto-gutter');
@@ -173,6 +215,33 @@ export default function ScoreManager() {
           </SwitchLabel>
         </Switch>
 
+        {/* 排序方式切换 */}
+        <Show when={ready() && scores().length > 0}>
+          <div class="mt-4 flex items-center justify-end gap-1">
+            <span class="mr-1 text-xs text-muted-foreground">{t('manager.sortBy')}</span>
+            <div class="flex items-center gap-0.5 rounded-md border p-0.5">
+              <For each={SORT_OPTIONS}>
+                {(opt) => (
+                  <button
+                    type="button"
+                    onClick={() => setSortBy(opt.key)}
+                    aria-pressed={sortBy() === opt.key}
+                    class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+                    classList={{
+                      'bg-primary text-primary-foreground': sortBy() === opt.key,
+                      'text-muted-foreground hover:bg-accent hover:text-accent-foreground':
+                        sortBy() !== opt.key,
+                    }}
+                  >
+                    <Icon icon={opt.icon} />
+                    {t(opt.labelKey)}
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
+
         {/* 乐谱列表 */}
         <Show when={ready()}>
           <Show
@@ -184,7 +253,7 @@ export default function ScoreManager() {
             }
           >
             <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <For each={scores()}>
+              <For each={sortedScores()}>
                 {(doc) => {
                   const s = statsOf(doc.content);
                   return (

@@ -19,6 +19,7 @@ import { CodeEditor } from '~/components/CodeEditor';
 import { PianoRoll } from '~/components/PianoRoll';
 import { Icon } from '~/components/Icon';
 import { SettingsModalButton } from '~/components/SettingsPanel';
+import { ShareDialog } from '~/components/QrDialogs';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
 import { Switch, SwitchControl, SwitchLabel, SwitchThumb } from '~/components/ui/switch';
@@ -218,6 +219,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [helpOpen, setHelpOpen] = createSignal(false);
   // 待确认载入的乐谱内容（示例/清空会覆盖当前内容，先二次确认）
   const [pendingLoad, setPendingLoad] = createSignal<string | null>(null);
+  // 导出模态框（受控，点「二维码分享」时先关它再开分享框）
+  const [downloadOpen, setDownloadOpen] = createSignal(false);
+  // 二维码分享当前乐谱
+  const [shareOpen, setShareOpen] = createSignal(false);
 
   // 乐谱标题（可在本页重命名，用本地信号即时反映改名）
   const [docTitle, setDocTitle] = createSignal(props.doc.title);
@@ -686,7 +691,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         <Button
           size="icon"
           variant={metronomeOn() ? 'default' : 'outline'}
-          class="metronome-toggle ml-1.5 size-7"
+          class="ml-1.5 size-7"
           onClick={() => setMetronomeOn((value) => !value)}
           aria-pressed={metronomeOn()}
           aria-label={metronomeOn() ? t('workbench.metronomeOff') : t('workbench.metronomeOn')}
@@ -803,21 +808,34 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
-  /** 导出按钮（下载 MIDI / dapume）。 */
+  /** 导出按钮（下载 MIDI / dapume / 二维码分享）。 */
   const DownloadButtons = () => (
-    <div class="grid grid-cols-2 gap-2">
+    <div class="space-y-2">
+      <div class="grid grid-cols-2 gap-2">
+        <Button
+          variant="outline"
+          class="gap-1.5"
+          onClick={onDownloadMidi}
+          disabled={score().notes.length === 0}
+        >
+          <Icon icon="lucide:file-music" />
+          {t('workbench.downloadMidi')}
+        </Button>
+        <Button variant="outline" class="gap-1.5" onClick={onDownloadDpm}>
+          <Icon icon="lucide:file-down" />
+          {t('workbench.downloadDpm')}
+        </Button>
+      </div>
       <Button
         variant="outline"
-        class="gap-1.5"
-        onClick={onDownloadMidi}
-        disabled={score().notes.length === 0}
+        class="w-full gap-1.5"
+        onClick={() => {
+          setDownloadOpen(false);
+          setShareOpen(true);
+        }}
       >
-        <Icon icon="lucide:file-music" />
-        {t('workbench.downloadMidi')}
-      </Button>
-      <Button variant="outline" class="gap-1.5" onClick={onDownloadDpm}>
-        <Icon icon="lucide:file-down" />
-        {t('workbench.downloadDpm')}
+        <Icon icon="lucide:qr-code" />
+        {t('workbench.downloadQr')}
       </Button>
     </div>
   );
@@ -906,23 +924,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </Dialog>
   );
 
-  /** 下载模态框按钮（窄屏：选择下载 MIDI 或 dapume）。 */
+  /** 导出按钮（打开受控的导出模态框）。 */
   const DownloadModalButton = () => (
-    <Dialog>
-      <DialogTrigger
-        as={Button}
-        variant="ghost"
-        size="icon"
-        class="size-8"
-        aria-label={t('workbench.download')}
-      >
-        <Icon icon="lucide:file-output" />
-      </DialogTrigger>
-      <DialogContent>
-        <DialogTitle class="mb-4">{t('workbench.download')}</DialogTitle>
-        <DownloadButtons />
-      </DialogContent>
-    </Dialog>
+    <Button
+      variant="ghost"
+      size="icon"
+      class="size-8"
+      aria-label={t('workbench.download')}
+      onClick={() => setDownloadOpen(true)}
+    >
+      <Icon icon="lucide:file-output" />
+    </Button>
   );
 
   /** 钢琴卷帘本体（不含标题栏）。 */
@@ -1162,7 +1174,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         <Button
           size="icon"
           variant={metronomeOn() ? 'default' : 'outline'}
-          class="metronome-toggle ml-1 size-8 shrink-0"
+          class="ml-1 size-8 shrink-0"
           onClick={() => setMetronomeOn((value) => !value)}
           aria-pressed={metronomeOn()}
           aria-label={metronomeOn() ? t('workbench.metronomeOff') : t('workbench.metronomeOn')}
@@ -1290,6 +1302,20 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </div>
       </DialogContent>
     </Dialog>
+    {/* 导出模态框（MIDI / dapume / 二维码分享） */}
+    <Dialog open={downloadOpen()} onOpenChange={setDownloadOpen}>
+      <DialogContent>
+        <DialogTitle class="mb-4">{t('workbench.download')}</DialogTitle>
+        <DownloadButtons />
+      </DialogContent>
+    </Dialog>
+    {/* 二维码分享当前乐谱 */}
+    <ShareDialog
+      open={shareOpen()}
+      title={docTitle()}
+      content={scoreText()}
+      onClose={() => setShareOpen(false)}
+    />
     {/* 重命名乐谱 */}
     <Dialog open={renaming()} onOpenChange={(o) => !o && setRenaming(false)}>
       <DialogContent>
