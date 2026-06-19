@@ -29,8 +29,8 @@ export const TUTORIAL_SECTIONS: GuideSection[] = [
       {
         type: 'text',
         text: L(
-          '接着认识时值。音符默认半拍，-、~、= 等后缀可以把它延长。《小星星》先展示最常用的句尾延长。',
-          'Next comes duration. Notes default to half a beat; suffixes such as -, ~, and = make them longer. “Twinkle, Twinkle” starts with simple phrase endings.',
+          '接着认识时值。音符默认是半拍；后缀 -、~、=、+ 分别表示 1、1.5、2、4 拍，适合延长旋律。*、^、\' 分别表示 0.5、0.25、0.125 拍，适合写更短的节奏。《小星星》先展示最常用的一拍句尾。',
+          'Next comes duration. A note defaults to half a beat. The suffixes -, ~, =, and + mean 1, 1.5, 2, and 4 beats; *, ^, and \' mean 0.5, 0.25, and 0.125 beats. “Twinkle, Twinkle” starts with a common one-beat phrase ending.',
         ),
       },
       {
@@ -43,8 +43,8 @@ export const TUTORIAL_SECTIONS: GuideSection[] = [
       {
         type: 'text',
         text: L(
-          '时值后缀可以组合。《小步舞曲》把短音、长音和休止放在同一段里，听起来会更有句法。',
-          'Duration suffixes can be combined. “Minuet” mixes short notes, long notes, and rests into more articulated phrases.',
+          '这些时值符号也可以连续叠加：例如 ~~ 是两个 1.5 拍相加，^= 则把四分之一拍与两拍相加；它们既能跟在音符后，也能跟在休止符 0 后。《小步舞曲》把短音、长音和休止放在同一段里。',
+          'Duration suffixes can also be stacked: ~~ adds two 1.5-beat values, while ^= adds a quarter beat to two beats. They work after both notes and the rest 0. “Minuet” mixes short notes, long notes, and rests.',
         ),
       },
       {

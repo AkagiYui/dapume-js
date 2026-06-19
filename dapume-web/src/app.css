@@ -312,6 +312,18 @@ html.standalone:not(.editor-page) body {
   box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 50%, transparent);
 }
 
+/* 节拍器是一个明确的二态控制：关闭为白底黑图标，开启固定为蓝底白图标。 */
+.metronome-toggle {
+  background-color: white !important;
+  color: oklch(0.205 0 0) !important;
+}
+
+.metronome-toggle[aria-pressed='true'] {
+  border-color: oklch(0.546 0.245 262.88) !important;
+  background-color: oklch(0.546 0.245 262.88) !important;
+  color: white !important;
+}
+
 /* ===== 页面切换的方向感视图过渡（前进左滑、后退右滑；由 SiteHeader 设置 html[data-nav]）。
    不支持 View Transitions 的浏览器无此动画但功能不受影响。 ===== */
 @media (prefers-reduced-motion: no-preference) {

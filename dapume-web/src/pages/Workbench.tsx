@@ -122,6 +122,13 @@ const CHEAT: { s: string; zh: string; en: string }[] = [
   { s: '// …', zh: '行尾注释', en: 'line comment' },
 ];
 
+/** 播放定位快捷键。 */
+const SHORTCUTS: { keys: string; zh: string; en: string }[] = [
+  { keys: 'Ctrl + ← / →', zh: '切换到上一个 / 下一个音符', en: 'Previous / next note' },
+  { keys: 'Ctrl + ↑ / ↓', zh: '切换到上一行 / 下一行', en: 'Previous / next line' },
+  { keys: 'Ctrl + Space', zh: '从当前位置播放 / 暂停', en: 'Play / pause from the current position' },
+];
+
 const EMPTY_SCORE: DapumeScore = {
   tracks: [],
   notes: [],
@@ -237,12 +244,20 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     }
   });
 
+  // 0ms 也是一个有效的定位状态；单独记录用户选中的源码行，避免把“第 1 行”误判为未定位。
+  const [selectedPlaybackLine, setSelectedPlaybackLine] = createSignal<number | null>(null);
+
+  function stopPlayback() {
+    setSelectedPlaybackLine(null);
+    stop();
+  }
+
   // 谱面变化时复位播放进度（编辑仅在停止态可进行）
-  createEffect(on(scoreText, () => stop(), { defer: true }));
+  createEffect(on(scoreText, () => stopPlayback(), { defer: true }));
 
   // 进入工作台即预热钢琴音色
   ensurePiano().catch(() => {});
-  onCleanup(() => stop());
+  onCleanup(() => stopPlayback());
 
   // 编辑/演奏页占满视口、自行管理内部滚动：临时取消 html 的滚动条槽位与视口滚动，
   // 避免 scrollbar-gutter（防 layout shift 用）在本页造成右侧留白与横向滚动
@@ -250,10 +265,31 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   onCleanup(() => document.documentElement.classList.remove('editor-page'));
 
   // 「播放态」：正在播放，或已暂停（currentTimeMs > 0）。暂停时仍保留高亮与实时调号/速度。
-  const playActive = createMemo(() => isPlaying() || currentTimeMs() > 0);
+  const playActive = createMemo(
+    () => isPlaying() || currentTimeMs() > 0 || selectedPlaybackLine() !== null,
+  );
 
   // 视觉时间 = 播放时间 - 延迟：卷帘与高亮整体延后，与无线耳机听到的声音对齐
   const visualTimeMs = createMemo(() => Math.max(0, currentTimeMs() - delayMs()));
+
+  const sourceLineStarts = createMemo(() => {
+    const starts = [0];
+    const text = scoreText();
+    for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
+    return starts;
+  });
+
+  function sourceLineAt(pos: number): number {
+    const starts = sourceLineStarts();
+    let lo = 0;
+    let hi = starts.length;
+    while (lo + 1 < hi) {
+      const mid = (lo + hi) >> 1;
+      if (starts[mid]! <= pos) lo = mid;
+      else hi = mid;
+    }
+    return lo + 1;
+  }
 
   /** 当前 4/4 小节与拍数，供进度条右侧实时显示。 */
   const musicalPosition = createMemo(() => musicalPositionAtTime(currentTimeMs(), score().sections));
@@ -294,7 +330,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   // 播放/暂停时高亮当前时间轴事件对应的源字符（含休止符，用视觉时间）
   const highlights = createMemo(() => {
     if (!playActive()) return [];
-    return activeEventsAt(score(), visualTimeMs()).map((n) => ({ from: n.srcStart, to: n.srcEnd }));
+    const selectedLine = selectedPlaybackLine();
+    return activeEventsAt(score(), visualTimeMs())
+      .filter((event) => selectedLine === null || sourceLineAt(event.srcStart) === selectedLine)
+      .map((event) => ({ from: event.srcStart, to: event.srcEnd }));
   });
 
   // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示，用视觉时间）
@@ -305,18 +344,25 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       pause();
     } else {
       const s = score();
-      if (s.notes.length > 0) void play(s.notes, s.durationMs, getPausedAt());
+      if (s.notes.length > 0) {
+        setSelectedPlaybackLine(null);
+        void play(s.notes, s.durationMs, getPausedAt());
+      }
     }
   }
 
   /** 跳转进度；若当前正在播放，立即从目标位置续播。 */
-  function jumpTo(ms: number) {
+  function jumpTo(ms: number, sourceLine: number | null = null) {
     const s = score();
     const target = Math.max(0, Math.min(ms, s.durationMs));
     const resume = isPlaying();
     if (resume) pause();
     seek(target);
-    if (resume && s.notes.length > 0 && target < s.durationMs) void play(s.notes, s.durationMs, target);
+    setSelectedPlaybackLine(sourceLine);
+    if (resume && s.notes.length > 0 && target < s.durationMs) {
+      setSelectedPlaybackLine(null);
+      void play(s.notes, s.durationMs, target);
+    }
   }
 
   // 去重并排序的事件起始时刻。休止符同样是可导航的乐谱事件。
@@ -328,23 +374,10 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   /** 每个含乐谱事件的源码行及其最早时间、精确拍位。 */
   const lineEntries = createMemo(() => {
-    const starts = [0];
-    const text = scoreText();
-    for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
-    const lineAt = (pos: number) => {
-      let lo = 0;
-      let hi = starts.length;
-      while (lo + 1 < hi) {
-        const mid = (lo + hi) >> 1;
-        if (starts[mid]! <= pos) lo = mid;
-        else hi = mid;
-      }
-      return lo + 1;
-    };
     const firstByLine = new Map<number, { time: number; beat: number }>();
     for (const event of score().events) {
       if (event.srcStart < 0) continue;
-      const line = lineAt(event.srcStart);
+      const line = sourceLineAt(event.srcStart);
       const prev = firstByLine.get(line);
       if (prev === undefined || event.startBeat < prev.beat) {
         firstByLine.set(line, { time: event.startTime, beat: event.startBeat });
@@ -355,10 +388,19 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       .sort((a, b) => a.line - b.line);
   });
 
-  // 行导航按“行首时间”步进；并行音轨若同一时刻开始，只产生一个有效跳点。
-  const lineOnsetTimes = createMemo(() =>
-    [...new Set(lineEntries().map((entry) => entry.time))].sort((a, b) => a - b),
-  );
+  /** 所有非空源码行的定位目标；参数首行没有事件，但仍是合法的第一个导航位置。 */
+  const lineTargets = createMemo(() => {
+    const entries = lineEntries();
+    return scoreText()
+      .split('\n')
+      .map((text, index) => ({ text, line: index + 1 }))
+      .filter(({ text }) => text.trim().length > 0)
+      .map(({ line }) => {
+        const exact = entries.find((entry) => entry.line === line);
+        const next = entries.find((entry) => entry.line > line);
+        return { line, time: exact?.time ?? next?.time ?? entries.at(-1)?.time ?? 0 };
+      });
+  });
 
   /** 左侧 gutter 的自动小节号：同一 4/4 小节跨多行时，只标记第一条音乐行。 */
   const measureNumbers = createMemo(() => {
@@ -391,20 +433,38 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     seekPrev(onsetTimes());
   }
   function seekToNextLine() {
-    seekNext(lineOnsetTimes());
+    moveLine(1);
   }
   function seekToPrevLine() {
-    seekPrev(lineOnsetTimes());
+    moveLine(-1);
+  }
+  function moveLine(direction: -1 | 1) {
+    const targets = lineTargets();
+    if (targets.length === 0) return;
+    let currentLine = selectedPlaybackLine();
+    if (currentLine === null) {
+      const activeLines = activeEventsAt(score(), currentTimeMs())
+        .map((event) => sourceLineAt(event.srcStart))
+        .sort((a, b) => a - b);
+      currentLine = activeLines[0] ?? targets[0]!.line;
+    }
+    let index = targets.findIndex((target) => target.line === currentLine);
+    if (index < 0) {
+      index = targets.findLastIndex((target) => target.line < currentLine!);
+      if (index < 0) index = 0;
+    }
+    const target = targets[Math.max(0, Math.min(targets.length - 1, index + direction))]!;
+    jumpTo(target.time, target.line);
   }
   function seekToLine(lineNumber: number) {
     const entries = lineEntries();
     // 参数行通常位于第一行且没有事件；它与第一条音乐行同属乐谱起点。
     if (entries.length > 0 && lineNumber <= entries[0]!.line) {
-      jumpTo(0);
+      jumpTo(0, lineNumber);
       return;
     }
     const exactOrNext = entries.find((entry) => entry.line >= lineNumber) ?? entries[entries.length - 1];
-    if (exactOrNext) jumpTo(exactOrNext.time);
+    jumpTo(exactOrNext?.time ?? 0, lineNumber);
   }
 
   // 空格播放/暂停；Ctrl/⌘ + 左右逐事件、Ctrl/⌘ + 上下逐行。
@@ -424,7 +484,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         el.getAttribute('role') === 'slider')
     )
       return;
-    if (el?.isContentEditable && !isArrow) return;
+    const modifiedSpace = e.code === 'Space' && (e.ctrlKey || e.metaKey);
+    if (el?.isContentEditable && !isArrow && !modifiedSpace) return;
     if (e.code === 'Space') {
       if (score().notes.length === 0) return;
       e.preventDefault();
@@ -504,6 +565,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       onChange={setScoreText}
       readOnly={isPlaying()}
       highlights={highlights()}
+      playingLines={
+        selectedPlaybackLine() === null ? undefined : [selectedPlaybackLine()!]
+      }
       keepVisible={keepLine() && playActive()}
       smoothScroll={smooth()}
       sticky={sticky()}
@@ -519,7 +583,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       minValue={0}
       maxValue={Math.max(1, score().durationMs)}
       value={[Math.min(currentTimeMs(), score().durationMs)]}
-      onChange={(v) => !isPlaying() && seek(v[0]!)}
+      onChange={(v) => !isPlaying() && jumpTo(v[0]!)}
       disabled={isPlaying() || score().durationMs === 0}
       class={p.class}
     >
@@ -560,7 +624,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           size="icon"
           variant="ghost"
           class="size-7"
-          onClick={() => stop()}
+          onClick={stopPlayback}
           aria-label={t('workbench.stop')}
         >
           <Icon icon="lucide:square" />
@@ -587,8 +651,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </InfoTip>
         <Button
           size="icon"
-          variant={metronomeOn() ? 'secondary' : 'ghost'}
-          class="size-7"
+          variant={metronomeOn() ? 'default' : 'outline'}
+          class="metronome-toggle ml-1.5 size-7"
           onClick={() => setMetronomeOn((value) => !value)}
           aria-pressed={metronomeOn()}
           aria-label={metronomeOn() ? t('workbench.metronomeOff') : t('workbench.metronomeOn')}
@@ -736,6 +800,27 @@ export default function Workbench(props: { doc: ScoreDoc }) {
               <div class="flex items-baseline justify-between gap-2">
                 <code class="font-mono text-primary">{c.s}</code>
                 <span class="text-muted-foreground">{locale() === 'zh' ? c.zh : c.en}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+      <Separator />
+      {/* 播放定位快捷键 */}
+      <div class="space-y-2">
+        <div class="text-xs font-medium text-muted-foreground">
+          {locale() === 'zh' ? '播放快捷键' : 'Playback shortcuts'}
+        </div>
+        <div class="space-y-1 text-sm">
+          <For each={SHORTCUTS}>
+            {(shortcut) => (
+              <div class="flex items-center justify-between gap-4">
+                <kbd class="rounded border bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                  {shortcut.keys}
+                </kbd>
+                <span class="text-right text-muted-foreground">
+                  {locale() === 'zh' ? shortcut.zh : shortcut.en}
+                </span>
               </div>
             )}
           </For>
@@ -1027,7 +1112,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           variant="outline"
           size="icon"
           class="size-8 shrink-0"
-          onClick={() => stop()}
+          onClick={stopPlayback}
           aria-label={t('workbench.stop')}
         >
           <Icon icon="lucide:square" />
@@ -1042,8 +1127,8 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         </span>
         <Button
           size="icon"
-          variant={metronomeOn() ? 'secondary' : 'ghost'}
-          class="size-8 shrink-0"
+          variant={metronomeOn() ? 'default' : 'outline'}
+          class="metronome-toggle ml-1 size-8 shrink-0"
           onClick={() => setMetronomeOn((value) => !value)}
           aria-pressed={metronomeOn()}
           aria-label={metronomeOn() ? t('workbench.metronomeOff') : t('workbench.metronomeOn')}

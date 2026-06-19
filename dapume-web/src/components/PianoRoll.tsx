@@ -45,15 +45,6 @@ const KEYBOARD_W = 68;
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 /** 卷帘至少展示三个完整八度。 */
 const MIN_VISIBLE_SEMITONES = 36;
-const WHITE_KEY_INDEX = new Map([
-  [0, 0],
-  [2, 1],
-  [4, 2],
-  [5, 3],
-  [7, 4],
-  [9, 5],
-  [11, 6],
-]);
 
 function isBlackKey(pitch: number): boolean {
   return BLACK_KEYS.has(((pitch % 12) + 12) % 12);
@@ -179,8 +170,8 @@ export function PianoRoll(props: PianoRollProps) {
 
     const naLo = kbAtStart ? KEYBOARD_W : 0; // 音符区时间坐标下界
     const naHi = naLo + noteAreaTime; // 上界
-    const keyBodyStart = kbAtStart ? 0 : naHi + 6; // 键本体起点（与音符区间隔 6px）
-    const keyBodyLen = KEYBOARD_W - 6;
+    const keyBodyStart = kbAtStart ? 0 : naHi; // 琴键紧贴瀑布，不留悬空缝隙
+    const keyBodyLen = KEYBOARD_W;
     const kbBorder = kbAtStart ? KEYBOARD_W : naHi; // 键盘与音符区的分隔线
 
     const visibleMs = noteAreaTime / pxPerMs;
@@ -190,12 +181,8 @@ export function PianoRoll(props: PianoRollProps) {
     const autoFollow = props.follow && props.isPlaying;
     let scrollX: number;
     if (autoFollow) {
-      // 判定线固定在交接处时锚点为 0（当前时刻落在 naLo）；否则悬在音符区 40% 处
-      const anchor = props.judgeAtKeyboard ? 0 : visibleMs * 0.4;
-      // 判定线贴键盘时不夹到 maxScroll：让判定线始终停在交接处，
-      // 末尾继续滚动使最后的音符一路流向键盘（而非判定线离开键盘走到瀑布末端）。
-      const maxS = props.judgeAtKeyboard ? Infinity : maxScroll;
-      scrollX = clamp(props.currentTimeMs - anchor, 0, maxS);
+      // 跟随播放时，当前音符始终落在琴键交接处；末尾继续滚动，直到最后一个音落键。
+      scrollX = Math.max(0, props.currentTimeMs);
       userScrollX = scrollX;
     } else {
       scrollX = clamp(userScrollX, 0, maxScroll);
@@ -324,26 +311,22 @@ export function PianoRoll(props: PianoRollProps) {
     const whiteFill = bg;
     const whiteBorder = border;
 
-    // 白键保持现有扁平配色，只把轮廓改成真实键盘的“窄后段 + 宽前段”凸字形。
-    // 每个八度的七个白键前端等宽；后端仍对齐十二平均律半音槽，黑键与瀑布继续等宽。
+    // 白键保持扁平配色和“窄后段 + 宽前段”轮廓。前段边界取相邻黑键的中心；
+    // E/F、B/C 之间没有黑键，前后两段便共用同一条直线，不会发生半键错位。
     for (let p = lo; p <= hi; p++) {
       if (isBlackKey(p)) continue;
       const lane = pitchRect(p);
       const narrowStart = lane.start;
       const narrowEnd = lane.start + lane.length;
-      const octaveBase = Math.floor(p / 12) * 12;
-      const octaveFirst = pitchRect(octaveBase);
-      const octaveLast = pitchRect(octaveBase + 11);
-      const octaveStart = Math.min(octaveFirst.start, octaveLast.start);
-      const octaveEnd = Math.max(
-        octaveFirst.start + octaveFirst.length,
-        octaveLast.start + octaveLast.length,
-      );
-      const whiteIndex = WHITE_KEY_INDEX.get(((p % 12) + 12) % 12) ?? 0;
-      const coordinateIndex = highAtCoord0 ? 6 - whiteIndex : whiteIndex;
-      const whiteFrontWidth = (octaveEnd - octaveStart) / 7;
-      const wideStart = octaveStart + coordinateIndex * whiteFrontWidth;
-      const wideEnd = wideStart + whiteFrontWidth;
+      let wideStart = narrowStart;
+      let wideEnd = narrowEnd;
+      for (const neighborPitch of [p - 1, p + 1]) {
+        if (!isBlackKey(neighborPitch)) continue;
+        const neighbor = pitchRect(neighborPitch);
+        const middle = neighbor.start + neighbor.length / 2;
+        if (middle < narrowStart) wideStart = middle;
+        else if (middle > narrowEnd) wideEnd = middle;
+      }
       const pressFill = activePitchColor.get(p);
       const pressed = pressFill !== undefined;
       ctx.fillStyle = pressed ? pressFill : whiteFill;
@@ -409,9 +392,9 @@ export function PianoRoll(props: PianoRollProps) {
     ctx.lineWidth = 1;
     lineAcrossPitch(kbBorder);
 
-    // 播放指针
+    // 跟随播放时，音符已直接落到琴键上，不再额外叠一条蓝色判定线。
     const tc = tPos(props.currentTimeMs);
-    if (tc >= naLo && tc <= naHi) {
+    if (!autoFollow && tc >= naLo && tc <= naHi) {
       ctx.strokeStyle = primary;
       ctx.lineWidth = 2;
       lineAcrossPitch(tc);

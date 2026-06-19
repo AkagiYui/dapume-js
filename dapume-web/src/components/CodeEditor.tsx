@@ -61,6 +61,8 @@ const tokenPlugin = ViewPlugin.fromClass(
 
 /** 更新「当前发声」高亮范围的副作用。 */
 const setHighlights = StateEffect.define<HighlightRange[]>();
+/** 显式指定播放行。用于“定位到第 1 行”这类没有音符事件、但仍是有效播放位置的行。 */
+const setPlayingLines = StateEffect.define<number[]>();
 const playingMark = Decoration.mark({ class: 'cm-playing-highlight' });
 
 const highlightField = StateField.define<DecorationSet>({
@@ -104,6 +106,14 @@ const lineHighlightField = StateField.define<DecorationSet>({
         }
         const ranges = [...lines]
           .sort((x, y) => x - y)
+          .map((n) => playingLine.range(doc.line(n).from));
+        deco = Decoration.set(ranges, true);
+      }
+      if (e.is(setPlayingLines)) {
+        const doc = tr.state.doc;
+        const ranges = [...new Set(e.value)]
+          .filter((n) => n >= 1 && n <= doc.lines)
+          .sort((a, b) => a - b)
           .map((n) => playingLine.range(doc.line(n).from));
         deco = Decoration.set(ranges, true);
       }
@@ -255,6 +265,8 @@ export interface CodeEditorProps {
   onChange?: (v: string) => void;
   readOnly?: boolean;
   highlights?: HighlightRange[];
+  /** 显式高亮的 1-based 播放行；提供时覆盖由音符范围推导出的行。 */
+  playingLines?: number[];
   /** 是否在播放时把当前发声的行滚动到可视区域。 */
   keepVisible?: boolean;
   /** keepVisible 滚动时是否平滑（默认 true）。 */
@@ -349,7 +361,12 @@ export function CodeEditor(props: CodeEditorProps) {
     const ranges = (props.highlights ?? []).map((r) => ({ from: r.from, to: r.to }));
     const v = view;
     if (!v) return;
-    v.dispatch({ effects: setHighlights.of(ranges) });
+    v.dispatch({
+      effects:
+        props.playingLines === undefined
+          ? setHighlights.of(ranges)
+          : [setHighlights.of(ranges), setPlayingLines.of(props.playingLines)],
+    });
     // 仅当「当前演奏行号」改变时才滚动，把该行锚定到视口约 40% 处：
     // 每行至多滚动一次，避免逐音符重复滚动造成的抖动闪烁。
     if (props.keepVisible && ranges.length > 0) {

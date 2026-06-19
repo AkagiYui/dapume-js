@@ -204,14 +204,15 @@ export async function playMetronomeTick(accent: boolean, scoreTimeMs?: number): 
       : now;
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  oscillator.type = 'triangle';
-  oscillator.frequency.setValueAtTime(accent ? 1760 : 1120, scheduled);
-  gain.gain.setValueAtTime(accent ? 0.12 : 0.075, scheduled);
-  gain.gain.exponentialRampToValueAtTime(0.0001, scheduled + (accent ? 0.055 : 0.04));
+  // 方波的瞬态比三角波更像清晰的机械节拍；音量与 velocity=96 的钢琴保持同一听感量级。
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(accent ? 1760 : 1080, scheduled);
+  gain.gain.setValueAtTime(accent ? 0.42 : 0.28, scheduled);
+  gain.gain.exponentialRampToValueAtTime(0.0001, scheduled + (accent ? 0.06 : 0.045));
   oscillator.connect(gain);
   gain.connect(context.destination);
   oscillator.start(scheduled);
-  oscillator.stop(scheduled + (accent ? 0.055 : 0.04));
+  oscillator.stop(scheduled + (accent ? 0.06 : 0.045));
 }
 
 /**
