@@ -18,16 +18,23 @@ import { t } from '../i18n';
 import { loadProgress, pianoState } from '../stores/player';
 import { isStandalone } from '../lib/pwa';
 
-/** 顶栏配置：标题点击的目标路由。 */
+/** 顶栏配置：标题点击的目标路由；以及 PWA 底部导航可选的「返回主页」入口。 */
 export interface HeaderConfig {
   titleTo: string;
+  /** 已安装 PWA 的底部导航左侧入口（图标 + 无障碍标签），指向 titleTo。
+   *  社区站设置它，使 PWA（无地址栏）也能从工具页回到社区；未设则左侧仅占位。 */
+  homeNav?: { icon: string; label: string };
 }
 const HeaderConfigContext = createContext<HeaderConfig>({ titleTo: '/docs' });
 
-/** 注入顶栏配置（如社区站把标题指向 `/`）。不包裹时使用默认值（标题→/docs）。 */
-export function HeaderConfigProvider(props: { titleTo?: string; children: JSX.Element }) {
+/** 注入顶栏配置（如社区站把标题指向 `/`、并在 PWA 底栏提供回社区入口）。不包裹时用默认值（标题→/docs）。 */
+export function HeaderConfigProvider(props: {
+  titleTo?: string;
+  homeNav?: { icon: string; label: string };
+  children: JSX.Element;
+}) {
   return (
-    <HeaderConfigContext.Provider value={{ titleTo: props.titleTo ?? '/docs' }}>
+    <HeaderConfigContext.Provider value={{ titleTo: props.titleTo ?? '/docs', homeNav: props.homeNav }}>
       {props.children}
     </HeaderConfigContext.Provider>
   );
@@ -66,6 +73,8 @@ export function NavA(props: {
   class: string;
   activeClass: string;
   pill?: boolean;
+  /** 无障碍标签 / 悬浮提示（仅图标按钮时尤其有用，如底栏返回主页）。 */
+  label?: string;
   children: JSX.Element;
 }) {
   const navigate = useNavigate();
@@ -81,6 +90,8 @@ export function NavA(props: {
     <a
       href={props.to}
       class={cn('relative', props.class, active() && props.activeClass)}
+      aria-label={props.label}
+      title={props.label}
       onClick={(e) => {
         // 仅拦截普通左键点击（保留 Cmd/Ctrl/中键新开标签等原生行为）
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -166,15 +177,28 @@ function TopHeader() {
 
 /** 独立窗口（PWA）形态：固定在底部、仅导航按钮 + 设置。 */
 function BottomNav() {
+  const cfg = useContext(HeaderConfigContext);
   return (
     <nav
       class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/90 backdrop-blur"
       style={{ 'padding-bottom': 'env(safe-area-inset-bottom)', 'view-transition-name': 'site-header' }}
     >
-      {/* 左侧占位 = 设置按钮宽：让 3 个导航按钮居中均分、不被右侧的设置按钮挤偏
-          （设置不参与导航按钮的空间计算）。 */}
+      {/* 左侧：返回主页入口（社区站→社区首页，PWA 无地址栏时唯一的回社区途径）；
+          未配置 homeNav 时退化为占位（= 设置按钮宽），让中间导航按钮居中不被右侧设置挤偏。 */}
       <div class="mx-auto flex max-w-md items-stretch px-2">
-        <div class="w-9 shrink-0" aria-hidden="true" />
+        <Show when={cfg.homeNav} fallback={<div class="w-9 shrink-0" aria-hidden="true" />}>
+          {(home) => (
+            <NavA
+              to={cfg.titleTo}
+              exact
+              label={home().label}
+              class="flex w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              activeClass="text-foreground"
+            >
+              <Icon icon={home().icon} class="text-lg" />
+            </NavA>
+          )}
+        </Show>
         <div class="flex flex-1 items-stretch justify-around gap-1">
           <NavA to="/tutorial" class={BOTTOM_LINK} activeClass={BOTTOM_ACTIVE}>
             <Icon icon="lucide:graduation-cap" class="text-lg" />
