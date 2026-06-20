@@ -3,7 +3,7 @@
  * 列出浏览器中（IndexedDB）的全部乐谱，可新建 / 打开 / 重命名 / 删除。
  * 提供「直接访问时自动打开上次乐谱」开关；点击乐谱进入 /workbench/{id} 编辑。
  */
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
 import { useLocation, useNavigate } from '@tanstack/solid-router';
 import { parse } from 'dapume-js';
 import { SiteHeader } from '../components/SiteHeader';
@@ -129,13 +129,6 @@ export default function ScoreManager() {
         list.sort((a, b) => b.updatedAt - a.updatedAt);
     }
     return reversed() ? list.reverse() : list;
-  });
-
-  // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift。
-  // 放进 onMount 仅客户端执行，避免在 render 期访问 document，使本页可被 SSG/SSR（社区站会预渲染乐谱库）。
-  onMount(() => {
-    document.documentElement.classList.add('auto-gutter');
-    onCleanup(() => document.documentElement.classList.remove('auto-gutter'));
   });
 
   onMount(async () => {

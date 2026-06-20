@@ -134,12 +134,6 @@ html.editor-page {
   overflow: hidden;
 }
 
-/* 乐谱管理页：用 auto（按需出现滚动条）而非常驻槽位——否则与 Kobalte 弹窗的
-   scroll-lock 补偿叠加会出现「空滚动条 + layout shift」。内容不溢出时不显示滚动条。 */
-html.auto-gutter {
-  scrollbar-gutter: auto;
-}
-
 /* 独立窗口（PWA）：导航条固定在底部，给正文留出底部空间。
    工作台编辑页（editor-page，无 SiteHeader、自管高度）排除在外。 */
 html.standalone:not(.editor-page) body {
