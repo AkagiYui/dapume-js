@@ -103,8 +103,9 @@ export function NavA(props: {
   );
 }
 
-/** 顶栏右侧聚类：音源加载/错误提示 + 四个主导航 + 设置按钮。导出供社区外壳直接复用。 */
-export function TopNav() {
+/** 顶栏右侧聚类：音源加载/错误提示 + 四个主导航 + 设置按钮。导出供社区外壳直接复用。
+ * hideSettings：隐藏设置齿轮（社区站把设置移入头像下拉，避免重复）。 */
+export function TopNav(props: { hideSettings?: boolean }) {
   return (
     <div class="flex items-center gap-1">
       {/* 音源加载进度（显示在 header 内，不在正文） */}
@@ -136,7 +137,9 @@ export function TopNav() {
           {t('nav.workbench')}
         </NavA>
       </nav>
-      <SettingsButton />
+      <Show when={!props.hideSettings}>
+        <SettingsButton />
+      </Show>
     </div>
   );
 }
