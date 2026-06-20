@@ -57,6 +57,20 @@ function writeSort(v: SortKey): void {
     /* 忽略 */
   }
 }
+function readReversed(): boolean {
+  try {
+    return localStorage.getItem('dapume.scoreSortReversed') === '1';
+  } catch {
+    return false;
+  }
+}
+function writeReversed(v: boolean): void {
+  try {
+    localStorage.setItem('dapume.scoreSortReversed', v ? '1' : '0');
+  } catch {
+    /* 忽略 */
+  }
+}
 
 /** 毫秒 → m:ss。 */
 function fmt(ms: number): string {
@@ -96,16 +110,25 @@ export default function ScoreManager() {
     setSortBySignal(v);
     writeSort(v);
   }
+  // 排序方向：false = 自然序（最近/创建为新→旧、名称为 A→Z）；true = 反向。
+  const [reversed, setReversedSignal] = createSignal(readReversed());
+  function setReversed(v: boolean) {
+    setReversedSignal(v);
+    writeReversed(v);
+  }
   const sortedScores = createMemo(() => {
     const list = [...scores()];
     switch (sortBy()) {
       case 'name':
-        return list.sort((a, b) => a.title.localeCompare(b.title, locale() === 'zh' ? 'zh' : 'en'));
+        list.sort((a, b) => a.title.localeCompare(b.title, locale() === 'zh' ? 'zh' : 'en'));
+        break;
       case 'created':
-        return list.sort((a, b) => b.createdAt - a.createdAt);
+        list.sort((a, b) => b.createdAt - a.createdAt);
+        break;
       default:
-        return list.sort((a, b) => b.updatedAt - a.updatedAt);
+        list.sort((a, b) => b.updatedAt - a.updatedAt);
     }
+    return reversed() ? list.reverse() : list;
   });
 
   // 本页用按需滚动条（auto），避免常驻槽位与弹窗 scroll-lock 叠加导致的空滚动条 / layout shift。
@@ -242,6 +265,20 @@ export default function ScoreManager() {
                 )}
               </For>
             </div>
+            <button
+              type="button"
+              onClick={() => setReversed(!reversed())}
+              aria-pressed={reversed()}
+              title={t('manager.sortReverse')}
+              aria-label={t('manager.sortReverse')}
+              class="ml-1 flex items-center rounded-md border p-1.5 text-xs transition-colors"
+              classList={{
+                'bg-primary text-primary-foreground': reversed(),
+                'text-muted-foreground hover:bg-accent hover:text-accent-foreground': !reversed(),
+              }}
+            >
+              <Icon icon={reversed() ? 'lucide:arrow-up-narrow-wide' : 'lucide:arrow-down-wide-narrow'} />
+            </button>
           </div>
         </Show>
 

@@ -158,6 +158,9 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.21)(jsdom@25.0.1)(vite@8.0.16(@types/node@22.19.21)(jiti@2.7.0)(terser@5.48.0))
+      workbox-window:
+        specifier: ^7.3.0
+        version: 7.4.1
 
   dapume-web-ui:
     dependencies:
@@ -191,6 +194,9 @@ importers:
       dapume-js:
         specifier: workspace:*
         version: link:../dapume-js
+      gifenc:
+        specifier: ^1.0.3
+        version: 1.0.3
       highlight.js:
         specifier: ^11.11.0
         version: 11.11.1
@@ -2053,6 +2059,9 @@ packages:
   get-tsconfig@5.0.0-beta.5:
     resolution: {integrity: sha512-/6gFNr0N04nob252sTQxyFLi3eKFRqIg1I87YcqAMT1i6SQrSF6KujUEQrtrjMV0H/eejTCltLdDSTEMzHbnsQ==}
     engines: {node: '>=20.20.0'}
+
+  gifenc@1.0.3:
+    resolution: {integrity: sha512-xdr6AdrfGBcfzncONUOlXMBuc5wJDtOueE3c5rdG0oNgtINLD+f2iFZltrBRZYzACRbKr+mSVU/x98zv2u3jmw==}
 
   glob@11.1.0:
     resolution: {integrity: sha512-vuNwKSaKiqm7g0THUBu2x7ckSs3XJLXE+2ssL7/MfTGPLLcrJQ/4Uq1CjPTtO5cCIiRxqvN6Twy1qOwhL0Xjcw==}
@@ -5204,6 +5213,8 @@ snapshots:
   get-tsconfig@5.0.0-beta.5:
     dependencies:
       resolve-pkg-maps: 1.0.0
+
+  gifenc@1.0.3: {}
 
   glob@11.1.0:
     dependencies:

@@ -1,9 +1,12 @@
 /** 应用入口：基于 TanStack Router（文件式路由 + history 模式）。 */
+/// <reference types="vite-plugin-pwa/client" />
 import 'dapume-web-ui/styles.css';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { RouterProvider, createRouter } from '@tanstack/solid-router';
+import { registerSW } from 'virtual:pwa-register';
 import { routeTree } from './routeTree.gen';
-import { isStandalone, rememberPath, takeStartPath } from 'dapume-web-ui';
+import { UpdateToast, isStandalone, rememberPath, takeStartPath } from 'dapume-web-ui';
 
 // PWA 启动恢复：独立窗口下、当前在起始页(/)、且存在已保存的其它路径时，
 // 在创建路由前改写地址，使路由直接渲染上次访问的页面（无闪烁）。
@@ -59,7 +62,22 @@ if (root) {
   // 若不先清空会导致内容渲染两份（预渲染的死内容叠在客户端实例之上）。
   // 这里我们用 render()（非 hydrate），先清空预渲染内容再挂载客户端 SPA。
   root.textContent = '';
-  render(() => <RouterProvider router={router} />, root);
+  // PWA 提示式更新：检测到新 SW 等待时弹出轻量提示，用户确认后 skipWaiting + 重载取新资源。
+  const [updateReady, setUpdateReady] = createSignal(false);
+  const updateSW = registerSW({ onNeedRefresh: () => setUpdateReady(true) });
+  render(
+    () => (
+      <>
+        <RouterProvider router={router} />
+        <UpdateToast
+          show={updateReady()}
+          onRefresh={() => void updateSW(true)}
+          onDismiss={() => setUpdateReady(false)}
+        />
+      </>
+    ),
+    root,
+  );
 
   // 记住当前路径，供 PWA 下次启动恢复到上次访问的页面
   rememberPath(window.location.pathname + window.location.search);

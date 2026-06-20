@@ -74,8 +74,8 @@ export default defineConfig({
     // 故显式指向套件源码目录，确保图标仍被离线化（dapume-web 自身 src 已不含图标引用）。
     iconifyOffline({ scanDir: '../dapume-web-ui/src' }),
     VitePWA({
-      // 部署后自动更新 Service Worker（无需用户手动刷新即可拿到新版本）
-      registerType: 'autoUpdate',
+      // 提示式更新：检测到新版本时由应用弹出轻量提示，用户点「刷新」后再 skipWaiting 并重载。
+      registerType: 'prompt',
       manifest: {
         name: '打谱么 · dapume',
         short_name: '打谱么',

@@ -12,13 +12,29 @@ import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { Icon } from './Icon';
 import { t } from '../i18n';
 import { assemble, buildShareFrames, parseFrame } from '../lib/qrShare';
+import { downloadBytes } from '../lib/download';
 
-/** 循环播放的帧间隔（毫秒）：留足摄像头锁定每帧的时间。 */
+/** 循环播放的帧间隔（毫秒）：留足摄像头锁定每帧的时间。导出动图也用作每帧时延。 */
 const FRAME_MS = 500;
 
 async function decodeImageData(data: ImageData): Promise<string | null> {
   const { default: jsQR } = await import('jsqr');
   return jsQR(data.data, data.width, data.height)?.data ?? null;
+}
+
+/** 加载 data URL 为 <img>。 */
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/** 把文件名里的非法字符替换为下划线。 */
+function safeName(s: string): string {
+  return (s || 'score').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 80);
 }
 
 /** 分享对话框：把乐谱编码为一组动态二维码循环播放。 */
@@ -85,6 +101,43 @@ export function ShareDialog(props: {
     return `repeating-linear-gradient(90deg, transparent 0, transparent calc(${seg}% - 1px), var(--border) calc(${seg}% - 1px), var(--border) ${seg}%)`;
   };
 
+  // 导出：把这组二维码编码为一张 GIF 动图（gifenc 按需动态导入，不进首屏包）。
+  // 二维码为黑白，量化到极少颜色即可；每帧时延沿用 FRAME_MS。导入端用 WebCodecs 逐帧解码即可还原。
+  const [exporting, setExporting] = createSignal(false);
+  async function exportGif() {
+    const list = urls();
+    if (!list.length || exporting()) return;
+    setExporting(true);
+    try {
+      // gifenc 无类型声明；此处忽略其隐式 any（仅用到下面三个函数）。
+      // @ts-ignore -- gifenc has no bundled types
+      const { GIFEncoder, quantize, applyPalette } = await import('gifenc');
+      const size = 300;
+      const cv = document.createElement('canvas');
+      cv.width = size;
+      cv.height = size;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      const enc = GIFEncoder();
+      for (const url of list) {
+        const img = await loadImage(url);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        const palette = quantize(data, 4);
+        const index = applyPalette(data, palette);
+        enc.writeFrame(index, size, size, { palette, delay: FRAME_MS });
+      }
+      enc.finish();
+      downloadBytes(enc.bytes(), `${safeName(props.title)}.gif`, 'image/gif');
+    } catch {
+      /* 忽略导出失败 */
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <Dialog open={props.open} onOpenChange={(o) => !o && props.onClose()}>
       <DialogContent>
@@ -120,12 +173,24 @@ export function ShareDialog(props: {
             />
           </div>
         </Show>
+        <button
+          type="button"
+          onClick={() => void exportGif()}
+          disabled={!ready() || urls().length === 0 || exporting()}
+          class="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent disabled:opacity-50"
+        >
+          <Icon
+            icon={exporting() ? 'lucide:loader-circle' : 'lucide:film'}
+            class={exporting() ? 'animate-spin' : undefined}
+          />
+          {exporting() ? t('manager.exporting') : t('manager.exportGif')}
+        </button>
       </DialogContent>
     </Dialog>
   );
 }
 
-/** 导入对话框：摄像头扫描 + 上传图片解码，按 checksum 归集多帧。 */
+/** 导入对话框：摄像头扫描 + 上传图片/动图解码，按 checksum 归集多帧。 */
 export function ImportDialog(props: {
   open: boolean;
   onClose: () => void;
@@ -221,28 +286,77 @@ export function ImportDialog(props: {
     }
   }
 
+  /** 静态图片解一帧（ImageDecoder 不可用时的回退）。 */
+  function decodeStatic(file: File): Promise<void> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          void decodeImageData(ctx.getImageData(0, 0, c.width, c.height)).then((text) => {
+            setError(!text || ingest(text) === 'invalid' ? t('manager.importDecodeError') : '');
+            URL.revokeObjectURL(img.src);
+            resolve();
+          });
+        } else {
+          URL.revokeObjectURL(img.src);
+          resolve();
+        }
+      };
+      img.onerror = () => {
+        setError(t('manager.importDecodeError'));
+        resolve();
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  /** 用 WebCodecs ImageDecoder 逐帧解码（支持 gif/webp/avif 动图，也兼容静态图）；不可用时回退单帧。 */
+  async function decodeFrames(file: File): Promise<void> {
+    const Ctor = (globalThis as { ImageDecoder?: new (init: { data: ArrayBuffer; type: string }) => any })
+      .ImageDecoder;
+    if (!Ctor) {
+      await decodeStatic(file);
+      return;
+    }
+    try {
+      const dec = new Ctor({ data: await file.arrayBuffer(), type: file.type || 'image/png' });
+      await dec.tracks.ready;
+      const count: number = dec.tracks?.selectedTrack?.frameCount ?? 1;
+      const c = document.createElement('canvas');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      let any = false;
+      let done = false;
+      for (let i = 0; i < count && !done; i++) {
+        const { image } = await dec.decode({ frameIndex: i });
+        c.width = image.displayWidth || image.codedWidth || 1;
+        c.height = image.displayHeight || image.codedHeight || 1;
+        ctx?.drawImage(image, 0, 0);
+        image.close?.();
+        if (!ctx) continue;
+        const text = await decodeImageData(ctx.getImageData(0, 0, c.width, c.height));
+        if (text) {
+          any = true;
+          if (ingest(text) === 'done') done = true;
+        }
+      }
+      dec.close?.();
+      setError(any ? '' : t('manager.importDecodeError'));
+    } catch {
+      await decodeStatic(file);
+    }
+  }
+
   function onFile(e: Event & { currentTarget: HTMLInputElement }) {
     const file = e.currentTarget.files?.[0];
     e.currentTarget.value = '';
     if (!file) return;
     setError('');
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const ctx = c.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        void decodeImageData(ctx.getImageData(0, 0, c.width, c.height)).then((text) => {
-          if (!text || ingest(text) === 'invalid') setError(t('manager.importDecodeError'));
-          else setError('');
-        });
-      }
-      URL.revokeObjectURL(img.src);
-    };
-    img.onerror = () => setError(t('manager.importDecodeError'));
-    img.src = URL.createObjectURL(file);
+    void decodeFrames(file);
   }
 
   // 打开时清零并启动摄像头、关闭/卸载时停止

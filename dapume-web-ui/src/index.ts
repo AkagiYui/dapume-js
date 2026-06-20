@@ -30,6 +30,7 @@ export { CodeBlock } from './components/CodeBlock';
 export { HighlightedCode } from './components/HighlightedCode';
 export { SyntaxSections } from './components/SyntaxSections';
 export { ApiTester } from './components/ApiTester';
+export { UpdateToast } from './components/UpdateToast';
 
 // ===== UI 原语 =====
 export * from './components/ui';
@@ -48,6 +49,7 @@ export * from './lib/viewTransition';
 export * from './lib/highlight';
 export * from './lib/tokenClass';
 export * from './lib/pwa';
+export * from './lib/versionCheck';
 
 // ===== i18n =====
 export { t } from './i18n';
