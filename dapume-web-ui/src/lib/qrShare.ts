@@ -1,14 +1,18 @@
 /**
- * 动态二维码分享协议（v2）。
+ * 动态二维码分享协议。
  *
- * 长谱无法塞进单张二维码，这里把 {title, content} 切分成多帧，每帧编码为一段 JSON：
- *   { v:2, k:checksum, t:title, n:total, i:index, d:slice }
- * 分享端循环播放这组帧；扫描端按 checksum 归集分片，集齐并校验后还原乐谱。
+ * 长谱无法塞进单张二维码，这里把 {title, content} 切分成多帧循环播放，扫描端归集分片后还原。
  *
- * - checksum 既是「会话标识」（区分不同乐谱/不同版本，扫到新值即清零重来），
- *   也是「完整性校验」（拼回后比对，错一片就不放行）。
- * - 每帧按 UTF-8 字节预算切分，分片偏小、配合高纠错（EC 'H'）二维码，便于稳定扫描。
- * - 兼容旧版单帧格式 { v:1, t, c }：parseFrame 将其视为「总数 1」的单帧。
+ * 当前导出用 v3（二进制 + 压缩，见文件下半部 buildShareFramesV3）：先 deflate-raw 压缩
+ * {title, content}，再把压缩字节切片放进二维码字节模式，省去 JSON/base64 开销，长谱帧数大减。
+ *
+ * 兼容解码：
+ * - v2 多帧 JSON：{ v:2, k:checksum, t:title, n:total, i:index, d:slice }
+ * - v1 旧版单帧 JSON：{ v:1, t, c }
+ *   二者仍由 parseFrame / assemble 处理；导入端先试二进制 v3（看魔数），不是再回退文本 v1/v2。
+ *
+ * 公共要点：key 既是「会话标识」（区分不同乐谱，扫到新值即清零重来），也是「完整性校验」
+ * （拼回后比对，错一片不放行）；每帧偏小、配合高纠错（EC 'H'）二维码，便于稳定扫描。
  */
 
 /** 协议版本：2 = 多帧。 */
@@ -175,4 +179,153 @@ export function assemble(
   }
   if (checksum(content) !== key) return null;
   return { content };
+}
+
+// ===========================================================================
+// v3：二进制 + 压缩分享协议
+//
+// 把 {title, content} 用 deflate-raw 压缩，压缩字节切片后直接进二维码「字节模式」，
+// 不再裹 JSON、也不 base64。dapume 是高度重复的数字简谱文本，压缩率常 60~78%，长谱帧数大减。
+// 每帧：8 字节头 [magic, ver, total, index, key(4 大端)] + 压缩载荷分片。
+// key = 压缩字节的 32 位哈希，兼作会话标识与完整性校验。
+// ===========================================================================
+
+/** 二进制协议版本。 */
+export const BIN_PROTOCOL_VERSION = 3;
+/** 帧头魔数（≠ JSON 起始 '{'=0x7B，便于和 v1/v2 文本帧区分）。 */
+const BIN_MAGIC = 0xda;
+/** 帧头长度：magic + ver + total + index + key(4)。 */
+const BIN_HEADER = 8;
+/** 每帧压缩载荷字节上限（含头 ≤ 158B，控制在原 ~180B 以内，保扫描稳定）。 */
+const BIN_PAYLOAD = 150;
+
+export interface ParsedBinFrame {
+  /** 会话标识 / 完整性校验（压缩字节的 32 位哈希）。 */
+  key: number;
+  total: number;
+  index: number;
+  /** 本帧携带的压缩载荷分片。 */
+  payload: Uint8Array;
+}
+
+/** FNV-1a 32 位哈希。 */
+function hash32(bytes: Uint8Array): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/** deflate-raw 压缩（浏览器/Node 内置 CompressionStream）。 */
+async function deflateRaw(input: Uint8Array): Promise<Uint8Array> {
+  const cs = new CompressionStream('deflate-raw');
+  const w = cs.writable.getWriter();
+  void w.write(new Uint8Array(input)); // 复制一份得到 ArrayBuffer 后端，满足 BufferSource 类型
+  void w.close();
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+
+/** deflate-raw 解压。 */
+async function inflateRaw(input: Uint8Array): Promise<Uint8Array> {
+  const ds = new DecompressionStream('deflate-raw');
+  const w = ds.writable.getWriter();
+  void w.write(new Uint8Array(input));
+  void w.close();
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+}
+
+/** 压缩前打包：[u16 标题字节数][标题 UTF-8][内容 UTF-8]。 */
+function packTitleContent(title: string, content: string): Uint8Array {
+  const enc = new TextEncoder();
+  const t = enc.encode(title);
+  const c = enc.encode(content);
+  const out = new Uint8Array(2 + t.length + c.length);
+  out[0] = (t.length >>> 8) & 0xff;
+  out[1] = t.length & 0xff;
+  out.set(t, 2);
+  out.set(c, 2 + t.length);
+  return out;
+}
+
+/** 解压后还原 {title, content}。 */
+function unpackTitleContent(bytes: Uint8Array): { title: string; content: string } {
+  const tlen = ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0);
+  const dec = new TextDecoder();
+  return {
+    title: dec.decode(bytes.subarray(2, 2 + tlen)),
+    content: dec.decode(bytes.subarray(2 + tlen)),
+  };
+}
+
+/**
+ * 把 {title, content} 压缩后编码为可循环播放的二进制多帧（v3）。
+ * 返回帧字节数组、总帧数与会话 key。每帧用二维码字节模式编码。
+ */
+export async function buildShareFramesV3(
+  title: string,
+  content: string,
+): Promise<{ frames: Uint8Array[]; total: number; key: number }> {
+  const comp = await deflateRaw(packTitleContent(title, content));
+  const key = hash32(comp);
+  const total = Math.max(1, Math.ceil(comp.length / BIN_PAYLOAD));
+  if (total > 255) throw new Error('content too large for QR sharing'); // 帧序号/总数为 uint8
+  const frames: Uint8Array[] = [];
+  for (let i = 0; i < total; i++) {
+    const slice = comp.subarray(i * BIN_PAYLOAD, (i + 1) * BIN_PAYLOAD);
+    const frame = new Uint8Array(BIN_HEADER + slice.length);
+    frame[0] = BIN_MAGIC;
+    frame[1] = BIN_PROTOCOL_VERSION;
+    frame[2] = total;
+    frame[3] = i;
+    frame[4] = (key >>> 24) & 0xff;
+    frame[5] = (key >>> 16) & 0xff;
+    frame[6] = (key >>> 8) & 0xff;
+    frame[7] = key & 0xff;
+    frame.set(slice, BIN_HEADER);
+    frames.push(frame);
+  }
+  return { frames, total, key };
+}
+
+/** 解析一帧二进制 v3；非本协议（魔数/版本不符或长度不足）返回 null。 */
+export function parseBinFrame(bytes: Uint8Array): ParsedBinFrame | null {
+  if (bytes.length < BIN_HEADER) return null;
+  if (bytes[0] !== BIN_MAGIC || bytes[1] !== BIN_PROTOCOL_VERSION) return null;
+  const total = bytes[2];
+  const index = bytes[3];
+  if (total < 1 || index >= total) return null;
+  const key = ((bytes[4] << 24) | (bytes[5] << 16) | (bytes[6] << 8) | bytes[7]) >>> 0;
+  return { key, total, index, payload: bytes.subarray(BIN_HEADER) };
+}
+
+/**
+ * 归集 v3 分片还原 {title, content}。集齐 total 片、压缩字节哈希与 key 相符且解压成功才返回。
+ */
+export async function assembleBin(
+  key: number,
+  total: number,
+  slices: Map<number, Uint8Array>,
+): Promise<{ title: string; content: string } | null> {
+  if (slices.size !== total) return null;
+  let len = 0;
+  for (let i = 0; i < total; i++) {
+    const s = slices.get(i);
+    if (!s) return null;
+    len += s.length;
+  }
+  const comp = new Uint8Array(len);
+  let off = 0;
+  for (let i = 0; i < total; i++) {
+    const s = slices.get(i)!;
+    comp.set(s, off);
+    off += s.length;
+  }
+  if (hash32(comp) !== key) return null; // 完整性校验
+  try {
+    return unpackTitleContent(await inflateRaw(comp));
+  } catch {
+    return null;
+  }
 }

@@ -11,16 +11,19 @@ import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { Icon } from './Icon';
 import { t } from '../i18n';
-import { assemble, buildShareFrames, parseFrame } from '../lib/qrShare';
+import { assemble, assembleBin, buildShareFramesV3, parseBinFrame, parseFrame } from '../lib/qrShare';
 import { downloadBytes } from '../lib/download';
 import { ANIM_FORMATS, encodeAnim, supportedFormats, type AnimFormat } from '../lib/animExport';
 
 /** 循环播放的帧间隔（毫秒）：留足摄像头锁定每帧的时间。导出动图也用作每帧时延。 */
 const FRAME_MS = 500;
 
-async function decodeImageData(data: ImageData): Promise<string | null> {
+/** 扫描一帧：返回二维码的文本与原始字节（字节用于二进制 v3，文本用于回退 v1/v2）。 */
+async function decodeImageData(data: ImageData): Promise<{ text: string; bytes: Uint8Array } | null> {
   const { default: jsQR } = await import('jsqr');
-  return jsQR(data.data, data.width, data.height)?.data ?? null;
+  const r = jsQR(data.data, data.width, data.height);
+  if (!r) return null;
+  return { text: r.data, bytes: Uint8Array.from(r.binaryData) };
 }
 
 /** 加载 data URL 为 <img>。 */
@@ -49,7 +52,8 @@ export function ShareDialog(props: {
   const [idx, setIdx] = createSignal(0);
   const [ready, setReady] = createSignal(false);
 
-  // 生成二维码：谱面变化时重建（按需动态导入 qrcode）。高纠错（H）+ 偏小分片，便于扫描。
+  // 生成二维码：谱面变化时重建。先 deflate 压缩并切成二进制多帧（v3），每帧用二维码字节模式编码。
+  // 高纠错（H）+ 偏小分片，便于扫描；压缩后长谱帧数大减。qrcode 按需动态导入，不进首屏包。
   createEffect(() => {
     const { open, title, content } = props;
     if (!open) return;
@@ -60,26 +64,26 @@ export function ShareDialog(props: {
     setReady(false);
     setUrls([]);
     setIdx(0);
-    const { frames } = buildShareFrames(title, content);
-    void import('qrcode')
-      .then(async ({ default: QRCode }) => {
-        const out: string[] = [];
-        for (const frame of frames) {
-          const url = await QRCode.toDataURL(frame, {
-            errorCorrectionLevel: 'H',
-            margin: 1,
-            width: 320,
-          });
-          if (cancelled) return;
-          out.push(url);
-        }
+    void (async () => {
+      const { frames } = await buildShareFramesV3(title, content);
+      const { default: QRCode } = await import('qrcode');
+      const out: string[] = [];
+      for (const frame of frames) {
+        // 二进制字节模式：直接编码压缩字节，不裹 JSON、不 base64。
+        const url = await QRCode.toDataURL([{ data: frame, mode: 'byte' }], {
+          errorCorrectionLevel: 'H',
+          margin: 1,
+          width: 320,
+        });
         if (cancelled) return;
-        setUrls(out);
-        setReady(true);
-      })
-      .catch(() => {
-        /* 生成失败时保持 loading 占位 */
-      });
+        out.push(url);
+      }
+      if (cancelled) return;
+      setUrls(out);
+      setReady(true);
+    })().catch(() => {
+      /* 生成失败时保持 loading 占位 */
+    });
   });
 
   // 循环推进：仅在多帧时启动定时器。
@@ -240,12 +244,17 @@ export function ImportDialog(props: {
   let raf = 0;
   const [error, setError] = createSignal('');
   const [scanning, setScanning] = createSignal(false);
-  // 归集状态：当前会话 checksum、总帧数、已收分片序号（用于分段展示）。
+  // 归集状态：会话标识（含模式前缀，用于「扫到新会话即清零」）、总帧数、已收分片序号（分段展示）。
+  // 分片值按会话模式区分：v3 为压缩字节分片（Uint8Array），v1/v2 为文本分片（string）。
   const [sessionKey, setSessionKey] = createSignal('');
   const [total, setTotal] = createSignal(0);
   const [collected, setCollected] = createSignal<Set<number>>(new Set());
-  let slices = new Map<number, string>();
+  let slices = new Map<number, string | Uint8Array>();
+  let mode: 'v2' | 'v3' = 'v3';
+  let binKey = 0; // v3 会话 key
+  let textKey = ''; // v1/v2 会话 checksum
   let title = '';
+  let finishing = false; // 防止集齐后（v3 异步解压期间）重复触发归集
 
   function resetSession() {
     setSessionKey('');
@@ -253,6 +262,9 @@ export function ImportDialog(props: {
     setCollected(new Set<number>());
     slices = new Map();
     title = '';
+    finishing = false;
+    binKey = 0;
+    textKey = '';
   }
 
   function stopCamera() {
@@ -263,29 +275,67 @@ export function ImportDialog(props: {
     setScanning(false);
   }
 
-  /** 归集一帧；扫到新 checksum 清零重来，集齐并校验通过则导入。 */
-  function ingest(text: string): 'done' | 'progress' | 'invalid' {
-    const f = parseFrame(text);
-    if (!f) return 'invalid';
-    if (f.key !== sessionKey()) {
-      slices = new Map();
-      setSessionKey(f.key);
-      setTotal(f.total);
-      title = f.title;
-    }
-    if (f.title) title = f.title;
-    if (!slices.has(f.index)) {
-      slices.set(f.index, f.data);
+  function newSession(sid: string, totalFrames: number, m: 'v2' | 'v3') {
+    slices = new Map();
+    finishing = false;
+    mode = m;
+    setSessionKey(sid);
+    setTotal(totalFrames);
+    setCollected(new Set<number>());
+  }
+
+  function addSlice(index: number, data: string | Uint8Array) {
+    if (!slices.has(index)) {
+      slices.set(index, data);
       setCollected(new Set(slices.keys()));
     }
-    if (slices.size === f.total) {
-      const asm = assemble(f.key, f.total, slices);
+  }
+
+  /** 集齐则按会话模式归集还原；v3 解压为异步，用 finishing 防重入。 */
+  function finishIfComplete() {
+    if (finishing || slices.size !== total()) return;
+    finishing = true;
+    if (mode === 'v3') {
+      void assembleBin(binKey, total(), slices as Map<number, Uint8Array>).then((asm) => {
+        if (asm) {
+          stopCamera();
+          props.onImported(asm.title, asm.content);
+        } else finishing = false; // 校验/解压失败，继续扫
+      });
+    } else {
+      const asm = assemble(textKey, total(), slices as Map<number, string>);
       if (asm) {
         stopCamera();
         props.onImported(title, asm.content);
-        return 'done';
-      }
+      } else finishing = false;
     }
+  }
+
+  /** 归集一帧：先试二进制 v3（看魔数），否则回退文本 v1/v2。扫到新会话即清零重来。 */
+  function ingest(d: { text: string; bytes: Uint8Array }): 'progress' | 'invalid' {
+    const bin = parseBinFrame(d.bytes);
+    if (bin) {
+      const sid = 'b' + bin.key.toString(16);
+      if (sid !== sessionKey()) {
+        binKey = bin.key;
+        title = '';
+        newSession(sid, bin.total, 'v3');
+      }
+      addSlice(bin.index, bin.payload);
+      finishIfComplete();
+      return 'progress';
+    }
+    const f = parseFrame(d.text);
+    if (!f) return 'invalid';
+    const sid = 'v' + f.key;
+    if (sid !== sessionKey()) {
+      textKey = f.key;
+      title = f.title;
+      newSession(sid, f.total, 'v2');
+    }
+    if (f.title) title = f.title;
+    addSlice(f.index, f.data);
+    finishIfComplete();
     return 'progress';
   }
 
@@ -299,12 +349,9 @@ export function ImportDialog(props: {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (ctx) {
         ctx.drawImage(video, 0, 0, w, h);
-        const text = await decodeImageData(ctx.getImageData(0, 0, w, h));
-        if (text) {
-          const r = ingest(text);
-          if (r === 'progress') setError('');
-          if (r === 'done') return; // 完成则停止扫描
-        }
+        const decoded = await decodeImageData(ctx.getImageData(0, 0, w, h));
+        // 集齐后由 finishIfComplete 调 stopCamera 结束扫描（v3 解压为异步），此处不需提前 return。
+        if (decoded && ingest(decoded) === 'progress') setError('');
       }
     }
     raf = requestAnimationFrame(() => void loop());
@@ -335,8 +382,8 @@ export function ImportDialog(props: {
         const ctx = c.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0);
-          void decodeImageData(ctx.getImageData(0, 0, c.width, c.height)).then((text) => {
-            setError(!text || ingest(text) === 'invalid' ? t('manager.importDecodeError') : '');
+          void decodeImageData(ctx.getImageData(0, 0, c.width, c.height)).then((decoded) => {
+            setError(!decoded || ingest(decoded) === 'invalid' ? t('manager.importDecodeError') : '');
             URL.revokeObjectURL(img.src);
             resolve();
           });
@@ -368,19 +415,16 @@ export function ImportDialog(props: {
       const c = document.createElement('canvas');
       const ctx = c.getContext('2d', { willReadFrequently: true });
       let any = false;
-      let done = false;
-      for (let i = 0; i < count && !done; i++) {
+      for (let i = 0; i < count; i++) {
         const { image } = await dec.decode({ frameIndex: i });
         c.width = image.displayWidth || image.codedWidth || 1;
         c.height = image.displayHeight || image.codedHeight || 1;
         ctx?.drawImage(image, 0, 0);
         image.close?.();
         if (!ctx) continue;
-        const text = await decodeImageData(ctx.getImageData(0, 0, c.width, c.height));
-        if (text) {
-          any = true;
-          if (ingest(text) === 'done') done = true;
-        }
+        const decoded = await decodeImageData(ctx.getImageData(0, 0, c.width, c.height));
+        // 集齐由 finishIfComplete（异步）处理；这里把每帧都喂进去即可。
+        if (decoded && ingest(decoded) !== 'invalid') any = true;
       }
       dec.close?.();
       setError(any ? '' : t('manager.importDecodeError'));
