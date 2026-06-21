@@ -1,8 +1,8 @@
 {
   "name": "dapume-vscode",
   "displayName": "Dapume",
-  "description": "dapume 线性乐谱（.dapume）的语法高亮与「渲染为 MIDI」命令。",
-  "version": "0.1.0",
+  "description": "dapume 线性乐谱（.dapume）的语法高亮与「渲染为 MIDI」命令；并为 Markdown ```dapume 代码块提供高亮。",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "publisher": "AkagiYui",
@@ -32,6 +32,14 @@
         "language": "dapume",
         "scopeName": "source.dapume",
         "path": "./syntaxes/dapume.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.dapume.codeblock",
+        "path": "./syntaxes/dapume.markdown.injection.json",
+        "injectTo": ["text.html.markdown"],
+        "embeddedLanguages": {
+          "meta.embedded.block.dapume": "dapume"
+        }
       }
     ],
     "commands": [
