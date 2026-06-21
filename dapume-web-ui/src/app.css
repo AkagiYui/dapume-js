@@ -8,6 +8,12 @@
    消费方自身的源码仍由其项目根自动探测。 */
 @source ".";
 
+@font-face {
+  font-family: "x-Vacle";
+  src: url("./assets/fonts/XVACLE-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
 /* 深色模式：匹配 .dark 类或 [data-kb-theme=dark] */
 @custom-variant dark (&:where(.dark, .dark *, [data-kb-theme=dark], [data-kb-theme=dark] *));
 
@@ -310,6 +316,360 @@ html.standalone:not(.editor-page) body {
   background-color: color-mix(in oklch, var(--primary) 35%, transparent);
   border-radius: 3px;
   box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 50%, transparent);
+}
+
+/* ===== 实时简谱 ===== */
+.jianpu-scroll {
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in oklch, var(--primary) 3%, transparent), transparent 26rem),
+    var(--background);
+}
+
+.jianpu-paper {
+  min-width: max-content;
+  min-height: 100%;
+  padding: 1.25rem 1.5rem 2rem;
+  color: var(--foreground);
+  font-family: "x-Vacle", "JianPu", "js-jianpu", "Noto Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+.jianpu-score-heading {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  width: fit-content;
+  margin: 0 0 1.1rem 2.75rem;
+  font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.jianpu-score-key {
+  color: var(--foreground);
+}
+
+.jianpu-system {
+  --jianpu-cell-width: 16rem;
+  width: fit-content;
+  margin-bottom: 1.65rem;
+}
+
+.jianpu-system-row {
+  display: grid;
+  grid-template-columns: 2.5rem repeat(var(--jianpu-measures), var(--jianpu-cell-width));
+}
+
+.jianpu-header-row {
+  min-height: 2.5rem;
+}
+
+.jianpu-track-spacer,
+.jianpu-track-label {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--background);
+}
+
+.jianpu-track-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  width: 2.5rem;
+  color: var(--muted-foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.65rem;
+  border-right: 1px solid var(--border);
+}
+
+.jianpu-track-label svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.jianpu-measure-header,
+.jianpu-measure-cell {
+  position: relative;
+  border-right: 1.5px solid color-mix(in oklch, var(--foreground) 55%, var(--border));
+  transition: background-color 150ms ease;
+}
+
+.jianpu-measure-header:first-of-type,
+.jianpu-measure-cell:first-of-type {
+  border-left: 1px solid color-mix(in oklch, var(--foreground) 30%, var(--border));
+}
+
+.jianpu-measure-header {
+  min-height: 2.5rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+}
+
+.jianpu-measure-number {
+  position: absolute;
+  top: 0;
+  left: 0.35rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+
+.jianpu-parameter {
+  position: absolute;
+  bottom: 0.28rem;
+  z-index: 2;
+  max-width: 90%;
+  padding: 0.08rem 0.3rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: color-mix(in oklch, var(--background) 86%, transparent);
+  border-radius: 0.2rem;
+  transform: translateX(0.2rem);
+}
+
+.jianpu-voice-row:last-child .jianpu-measure-cell {
+  border-bottom: 1px solid color-mix(in oklch, var(--foreground) 30%, var(--border));
+}
+
+.jianpu-measure-header.is-selected,
+.jianpu-measure-cell.is-selected {
+  background-color: color-mix(in oklch, var(--accent) 60%, transparent);
+}
+
+.jianpu-measure-header.is-active,
+.jianpu-measure-cell.is-active {
+  background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+
+.jianpu-measure-header.is-selected.is-active,
+.jianpu-measure-cell.is-selected.is-active {
+  background-color: color-mix(in oklch, var(--primary) 20%, transparent);
+}
+
+.jianpu-beat-guide {
+  position: absolute;
+  inset-block: 0;
+  width: 1px;
+  pointer-events: none;
+  background: color-mix(in oklch, var(--border) 35%, transparent);
+}
+
+.jianpu-atom {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  min-width: 1.5rem;
+  height: 4.2rem;
+  padding: 0.95rem 0.1rem 0.4rem;
+  overflow: visible;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0.2rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.jianpu-atom:hover {
+  z-index: 3;
+  background-color: color-mix(in oklch, var(--accent) 70%, transparent);
+}
+
+.jianpu-atom:focus-visible {
+  z-index: 4;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.jianpu-atom.is-active {
+  z-index: 4;
+  background-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 50%, transparent);
+}
+
+.jianpu-note-cluster {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.jianpu-pitches {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.18rem;
+}
+
+.jianpu-atom.is-polyphonic .jianpu-pitches {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.18rem;
+}
+
+.jianpu-atom.is-polyphonic {
+  align-items: flex-end;
+  height: 6.55rem;
+}
+
+.jianpu-atom.is-polyphonic .jianpu-pitch-glyph {
+  min-width: 1rem;
+  font-size: 0.82rem;
+}
+
+.jianpu-atom.is-polyphonic .jianpu-octave-above {
+  top: -0.45rem;
+}
+
+.jianpu-atom.is-polyphonic .jianpu-octave-below {
+  bottom: -0.38rem;
+}
+
+.jianpu-pitch-glyph {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 1.12rem;
+  padding-bottom: 0.05rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.jianpu-pitch-main {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+}
+
+.jianpu-accidental {
+  margin-right: 0.02rem;
+  font-family: "Noto Music", "Bravura Text", ui-serif, serif;
+  font-size: 0.62em;
+  font-weight: 500;
+}
+
+.jianpu-dot {
+  margin-left: 0.06rem;
+  font-size: 0.8em;
+  font-weight: 800;
+}
+
+.jianpu-duration-line {
+  display: block;
+  width: 100%;
+  height: 0.13rem;
+  border-top: 1.5px solid currentColor;
+}
+
+.jianpu-octave-dots {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  gap: 0.05rem;
+  color: currentColor;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.45rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.jianpu-octave-above {
+  top: -0.62rem;
+}
+
+.jianpu-octave-below {
+  bottom: -0.55rem;
+}
+
+.jianpu-extension-line {
+  display: inline-block;
+  align-self: center;
+  width: clamp(0.65rem, 1.5vw, 1.15rem);
+  margin-bottom: 0.45rem;
+  border-top: 1.5px solid currentColor;
+}
+
+.jianpu-rest-glyph {
+  color: var(--muted-foreground);
+}
+
+.jianpu-chord-name {
+  position: absolute;
+  top: 0.05rem;
+  left: 0.15rem;
+  display: block;
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  color: oklch(0.57 0.17 47);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jianpu-chord-source {
+  display: none;
+}
+
+.dark .jianpu-chord-name {
+  color: oklch(0.8 0.14 60);
+}
+
+.jianpu-tie {
+  position: absolute;
+  top: 1.25rem;
+  height: 0.75rem;
+  pointer-events: none;
+  border-top: 1.5px solid currentColor;
+  border-radius: 50% 50% 0 0;
+}
+
+.jianpu-tie-in {
+  left: -0.15rem;
+  width: 45%;
+}
+
+.jianpu-tie-out {
+  right: -0.15rem;
+  width: 45%;
+}
+
+.jianpu-end-mark {
+  width: 0.32rem;
+  height: 2.4rem;
+  margin: -1.65rem 0 0 auto;
+  border-right: 3px solid var(--foreground);
+  border-left: 1px solid var(--foreground);
+}
+
+@media (max-width: 768px) {
+  .jianpu-paper {
+    padding: 1rem 1rem 1.5rem;
+  }
+  .jianpu-system {
+    --jianpu-cell-width: 14rem;
+  }
 }
 
 /* ===== 页面切换的方向感视图过渡（前进左滑、后退右滑；由 SiteHeader 设置 html[data-nav]）。

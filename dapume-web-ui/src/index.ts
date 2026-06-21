@@ -23,6 +23,7 @@ export {
 } from './components/SiteHeader';
 export { Icon } from './components/Icon';
 export { PianoRoll, type PianoRollProps } from './components/PianoRoll';
+export { JianpuScore, type JianpuScoreProps } from './components/JianpuScore';
 export { CodeEditor, type CodeEditorProps, type HighlightRange } from './components/CodeEditor';
 export { SettingsPanel, SettingsButton, SettingsModalButton } from './components/SettingsPanel';
 export { ShareDialog, ImportDialog } from './components/QrDialogs';
@@ -44,6 +45,7 @@ export * from './stores/scores';
 export * from './lib/utils';
 export * from './lib/download';
 export * from './lib/measures';
+export * from './lib/jianpu';
 export * from './lib/qrShare';
 export * from './lib/viewTransition';
 export * from './lib/highlight';

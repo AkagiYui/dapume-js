@@ -277,6 +277,8 @@ export interface CodeEditorProps {
   measureNumbers?: readonly (number | null)[];
   /** 点击某一行时通知上层，用于把播放进度定位到该行行首。 */
   onLineClick?: (lineNumber: number) => void;
+  /** 光标所在源码行变化时通知上层，用于同步预览中的选中小节。 */
+  onActiveLineChange?: (lineNumber: number) => void;
   /** 编辑器聚焦时按 Ctrl/⌘+Space，从当前播放位置开始播放。 */
   onPlayShortcut?: () => void;
   placeholder?: string;
@@ -313,6 +315,9 @@ export function CodeEditor(props: CodeEditorProps) {
           stickyHeaderPlugin((lineNumber) => props.onLineClick?.(lineNumber)),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) props.onChange?.(u.state.doc.toString());
+            if (u.selectionSet || u.docChanged) {
+              props.onActiveLineChange?.(u.state.doc.lineAt(u.state.selection.main.head).number);
+            }
           }),
           EditorView.domEventHandlers({
             keydown(event) {
@@ -340,6 +345,7 @@ export function CodeEditor(props: CodeEditorProps) {
         ],
       }),
     });
+    props.onActiveLineChange?.(view.state.doc.lineAt(view.state.selection.main.head).number);
   });
 
   // 外部 value 变化时同步文档（避免回环）

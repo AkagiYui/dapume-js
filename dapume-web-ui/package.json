@@ -1,6 +1,6 @@
 {
   "name": "dapume-web-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "打谱么 Web 可复用套件 —— 外壳、5 个页面、编辑器/钢琴卷帘、播放与设置、i18n 与设计令牌，供 dapume-web 及社区站以源码方式复用。",

@@ -1,6 +1,6 @@
 {
   "name": "dapume-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "打谱么 Web —— 基于 dapume-js 的纯前端线性乐谱编辑与播放应用",

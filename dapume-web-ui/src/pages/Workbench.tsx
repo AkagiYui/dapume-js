@@ -17,6 +17,7 @@ import type { DapumeScore } from 'dapume-js';
 
 import { CodeEditor } from '../components/CodeEditor';
 import { PianoRoll } from '../components/PianoRoll';
+import { JianpuScore } from '../components/JianpuScore';
 import { Icon } from '../components/Icon';
 import { SettingsModalButton } from '../components/SettingsPanel';
 import { ShareDialog } from '../components/QrDialogs';
@@ -196,6 +197,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
   const [pianoCenter, setPianoCenter] = createSignal(lsGet('dapume.pianoCenter', 'true') === 'true');
   createEffect(() => lsSet('dapume.pianoCenter', String(pianoCenter())));
 
+  // 右侧可视化类型：保留钢琴卷帘，并新增实时简谱。
+  const [visualizer, setVisualizer] = createSignal<'piano' | 'jianpu'>(
+    lsGet('dapume.visualizer', 'piano') === 'jianpu' ? 'jianpu' : 'piano',
+  );
+  createEffect(() => lsSet('dapume.visualizer', visualizer()));
+
   // 视觉延迟（毫秒）：把卷帘与高亮整体延后，以适配无线耳机的音频延迟
   const [delayMs, setDelayMs] = createSignal(
     Math.max(0, Math.min(500, parseInt(lsGet('dapume.visualDelay', '0'), 10) || 0)),
@@ -252,6 +259,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   // 0ms 也是一个有效的定位状态；单独记录用户选中的源码行，避免把“第 1 行”误判为未定位。
   const [selectedPlaybackLine, setSelectedPlaybackLine] = createSignal<number | null>(null);
+  const [selectedEditorLine, setSelectedEditorLine] = createSignal(1);
   const [playheadPositioned, setPlayheadPositioned] = createSignal(false);
 
   function stopPlayback() {
@@ -353,6 +361,19 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     return [...lines].sort((a, b) => a - b);
   });
 
+  /** 简谱当前播放小节：与编辑器播放高亮共用视觉延迟后的时间。 */
+  const activeJianpuBeat = createMemo<number | null>(() => {
+    if (!playActive() || score().durationBeats <= 0) return null;
+    return Math.min(
+      Math.max(0, score().durationBeats - 1e-7),
+      beatAtTime(visualTimeMs(), score().sections),
+    );
+  });
+  const activeJianpuMeasure = createMemo<number | null>(() => {
+    const beat = activeJianpuBeat();
+    return beat === null ? null : measureAtBeat(beat);
+  });
+
   // 当前时刻生效的调号与速度（用于编辑器标题栏实时显示，用视觉时间）
   const liveParams = createMemo(() => paramsAt(score(), visualTimeMs()));
 
@@ -411,6 +432,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     return [...firstByLine]
       .map(([line, position]) => ({ line, ...position }))
       .sort((a, b) => a.line - b.line);
+  });
+
+  /** 编辑器光标所在行对应的小节；空行/参数行归到时间线上最近的下一小节。 */
+  const selectedJianpuMeasure = createMemo<number | null>(() => {
+    const entries = lineEntries();
+    if (entries.length === 0) return null;
+    const line = selectedEditorLine();
+    const exact = entries.find((entry) => entry.line === line);
+    if (exact) return measureAtBeat(exact.beat);
+    const next = entries.find((entry) => entry.line > line);
+    return measureAtBeat((next ?? entries[entries.length - 1]!).beat);
   });
 
   // 行导航按“行首时间”步进；并行音轨若同一时刻开始，只产生一个有效跳点。
@@ -608,6 +640,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       sticky={sticky()}
       measureNumbers={measureNumbers()}
       onLineClick={seekToLine}
+      onActiveLineChange={setSelectedEditorLine}
       onPlayShortcut={() => {
         if (isPlaying()) pause();
         else playFromCurrentPosition();
@@ -963,6 +996,36 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </Show>
   );
 
+  /** 实时简谱本体：含休止符，因此以 events 而不是可发声音符判断空谱。 */
+  const JianpuBody = () => (
+    <Show
+      when={score().events.length > 0}
+      fallback={
+        <div class="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          {t('workbench.emptyScore')}
+        </div>
+      }
+    >
+      <JianpuScore
+        score={score()}
+        source={scoreText()}
+        activeRanges={highlights()}
+        activeBeat={activeJianpuBeat()}
+        activeMeasure={activeJianpuMeasure()}
+        selectedMeasure={selectedJianpuMeasure()}
+        isPlaying={isPlaying()}
+        followPlayback={keepLine()}
+        onSeekBeat={(beat) => jumpTo(timeAtBeat(beat, score().sections))}
+      />
+    </Show>
+  );
+
+  const VisualizerBody = () => (
+    <Show when={visualizer() === 'piano'} fallback={<JianpuBody />}>
+      <PianoRollBody />
+    </Show>
+  );
+
   /** 标题栏用的紧凑开关（图标 + 小开关），高度不超过标题文字，不撑高标题栏。 */
   const MiniSwitch = (p: {
     checked: boolean;
@@ -1044,6 +1107,45 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
+  const JianpuInfo = () => (
+    <div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <span class="shrink-0 font-medium text-foreground">4/4</span>
+      <span class="hidden min-w-0 truncate sm:block">{t('workbench.jianpuHint')}</span>
+    </div>
+  );
+
+  /** 右侧可视化切换：与面板底栏同高，窄屏抽屉复用。 */
+  const VisualizerSwitch = () => (
+    <div class="flex shrink-0 rounded-md bg-muted p-0.5" role="group" aria-label={t('workbench.visualizer')}>
+      <Button
+        variant="ghost"
+        size="sm"
+        class={`h-7 gap-1 px-2 text-xs ${visualizer() === 'piano' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+        aria-pressed={visualizer() === 'piano'}
+        onClick={() => setVisualizer('piano')}
+      >
+        <Icon icon="lucide:audio-waveform" />
+        {t('workbench.pianoRollTitle')}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        class={`h-7 gap-1 px-2 text-xs ${visualizer() === 'jianpu' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+        aria-pressed={visualizer() === 'jianpu'}
+        onClick={() => setVisualizer('jianpu')}
+      >
+        <Icon icon="lucide:list-music" />
+        {t('workbench.jianpuTitle')}
+      </Button>
+    </div>
+  );
+
+  const VisualizerInfo = () => (
+    <Show when={visualizer() === 'piano'} fallback={<JianpuInfo />}>
+      <PianoRollInfo />
+    </Show>
+  );
+
   // ===== 宽屏分区 =====
   // 乐谱标题 + 重命名按钮：宽屏平时隐藏、hover 标题时显示；窄屏（无 hover）常显。标题溢出省略。
   const TitleWithRename = (p: { class?: string }) => (
@@ -1104,17 +1206,15 @@ export default function Workbench(props: { doc: ScoreDoc }) {
     </div>
   );
 
-  // 钢琴卷帘面板：卷帘在上、标题与开关栏在下（顶栏改底栏）。标题/提示溢出省略、不换行。
-  const PianoRollPane = () => (
+  // 可视化面板：谱面在上、视图切换与当前视图信息在下。
+  const VisualizerPane = () => (
     <div class="flex h-full flex-col">
       <div class="min-h-0 flex-1">
-        <PianoRollBody />
+        <VisualizerBody />
       </div>
       <div class="flex items-center justify-between gap-2 border-t px-3 py-1.5">
-        <span class="min-w-0 shrink truncate text-sm font-medium">
-          {t('workbench.pianoRollTitle')}
-        </span>
-        <PianoRollInfo />
+        <VisualizerSwitch />
+        <VisualizerInfo />
       </div>
     </div>
   );
@@ -1186,9 +1286,9 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           size="icon"
           class="size-8 shrink-0"
           onClick={() => setPianoOpen(true)}
-          aria-label={t('workbench.pianoRollTitle')}
+          aria-label={t('workbench.visualizer')}
         >
-          <Icon icon="lucide:audio-waveform" />
+          <Icon icon={visualizer() === 'piano' ? 'lucide:audio-waveform' : 'lucide:list-music'} />
         </Button>
       </div>
     );
@@ -1237,12 +1337,17 @@ export default function Workbench(props: { doc: ScoreDoc }) {
           <BottomDrawer
             open={pianoOpen()}
             onClose={() => setPianoOpen(false)}
-            title={t('workbench.pianoRollTitle')}
-            headerRight={<PianoRollInfo />}
+            title={visualizer() === 'piano' ? t('workbench.pianoRollTitle') : t('workbench.jianpuTitle')}
+            headerRight={
+              <div class="flex items-center gap-2">
+                <VisualizerSwitch />
+                <VisualizerInfo />
+              </div>
+            }
             hideClose
             class="h-[70dvh]"
           >
-            <PianoRollBody />
+            <VisualizerBody />
           </BottomDrawer>
         </div>
       }
@@ -1267,7 +1372,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
                 <ResizableHandle withHandle />
                 {/* 允许钢琴卷帘完全收起（minSize 0）；上方面板保留最小高度，握把始终可操作 */}
                 <ResizablePanel minSize={0} collapsible class="overflow-hidden">
-                  <PianoRollPane />
+                  <VisualizerPane />
                 </ResizablePanel>
               </Resizable>
             }
@@ -1282,7 +1387,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel minSize={0.2} collapsible class="overflow-hidden">
-                <PianoRollPane />
+                <VisualizerPane />
               </ResizablePanel>
             </Resizable>
           </Show>

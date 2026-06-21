@@ -1,5 +1,9 @@
 # dapume-web
 
+The workbench provides two synchronized score visualizations: a piano roll and a live 4/4 numbered-musical-notation (简谱) score. The numbered score renders notes, rests, accidentals, octave marks, durations, dots, ties across barlines, simultaneous notes, multiple voices, chord names, key/tempo changes, playback highlighting, and editor-line selection highlighting.
+
+The bundled `x-Vacle` numbered-notation font is distributed under the SIL Open Font License 1.1; its license is included with the shared UI package at `../dapume-web-ui/src/assets/fonts/OFL-x-Vacle.txt`.
+
 > 打谱么 Web —— 基于 [`dapume-js`](../dapume-js) 的纯前端线性乐谱编辑与播放应用。
 
 一个用 **SolidJS + Vite 8** 构建的单页应用，构建产物为**纯静态文件**，可部署到任意静态托管（如 Cloudflare Pages）。
