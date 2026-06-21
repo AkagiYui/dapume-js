@@ -1013,8 +1013,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
         activeBeat={activeJianpuBeat()}
         activeMeasure={activeJianpuMeasure()}
         selectedMeasure={selectedJianpuMeasure()}
-        isPlaying={isPlaying()}
-        followPlayback={keepLine()}
+        followPlayback={follow()}
         onSeekBeat={(beat) => jumpTo(timeAtBeat(beat, score().sections))}
       />
     </Show>
@@ -1109,6 +1108,12 @@ export default function Workbench(props: { doc: ScoreDoc }) {
 
   const JianpuInfo = () => (
     <div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <MiniSwitch
+        checked={follow()}
+        onChange={setFollow}
+        icon="lucide:crosshair"
+        label={t('workbench.followPlayback')}
+      />
       <span class="shrink-0 font-medium text-foreground">4/4</span>
       <span class="hidden min-w-0 truncate sm:block">{t('workbench.jianpuHint')}</span>
     </div>
