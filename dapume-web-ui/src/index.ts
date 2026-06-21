@@ -50,6 +50,7 @@ export * from './lib/highlight';
 export * from './lib/tokenClass';
 export * from './lib/pwa';
 export * from './lib/versionCheck';
+export * from './lib/animExport';
 
 // ===== i18n =====
 export { t } from './i18n';

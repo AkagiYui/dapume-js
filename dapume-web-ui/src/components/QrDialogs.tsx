@@ -13,6 +13,7 @@ import { Icon } from './Icon';
 import { t } from '../i18n';
 import { assemble, buildShareFrames, parseFrame } from '../lib/qrShare';
 import { downloadBytes } from '../lib/download';
+import { ANIM_FORMATS, encodeAnim, supportedFormats, type AnimFormat } from '../lib/animExport';
 
 /** 循环播放的帧间隔（毫秒）：留足摄像头锁定每帧的时间。导出动图也用作每帧时延。 */
 const FRAME_MS = 500;
@@ -101,36 +102,51 @@ export function ShareDialog(props: {
     return `repeating-linear-gradient(90deg, transparent 0, transparent calc(${seg}% - 1px), var(--border) calc(${seg}% - 1px), var(--border) ${seg}%)`;
   };
 
-  // 导出：把这组二维码编码为一张 GIF 动图（gifenc 按需动态导入，不进首屏包）。
-  // 二维码为黑白，量化到极少颜色即可；每帧时延沿用 FRAME_MS。导入端用 WebCodecs 逐帧解码即可还原。
+  // 导出：把这组二维码编码为动图，可选 GIF / WebP / AVIF（编码器按需动态导入，不进首屏包）。
+  // 三者都是多帧动画，导入端用 WebCodecs 逐帧解码即可完整还原长谱；每帧时延沿用 FRAME_MS。
+  // GIF 通用；WebP/AVIF 视浏览器编码能力开放，不支持的格式在 UI 上禁用，绝不产出坏文件。
+  const SIZE = 300;
   const [exporting, setExporting] = createSignal(false);
-  async function exportGif() {
-    const list = urls();
-    if (!list.length || exporting()) return;
+  const [format, setFormat] = createSignal<AnimFormat>('gif');
+  const [support, setSupport] = createSignal<Record<AnimFormat, boolean>>({ gif: true, webp: false });
+
+  // 打开对话框时探测可用导出格式（结果模块内缓存）；当前所选若不可用则回落 GIF。
+  createEffect(() => {
+    if (!props.open) return;
+    void supportedFormats().then((s) => {
+      setSupport(s);
+      if (!s[format()]) setFormat('gif');
+    });
+  });
+
+  // 把当前这组二维码逐帧画到画布并取出 ImageData，供各编码器使用（统一白底、统一尺寸）。
+  async function renderFrames(): Promise<ImageData[]> {
+    const cv = document.createElement('canvas');
+    cv.width = SIZE;
+    cv.height = SIZE;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return [];
+    const out: ImageData[] = [];
+    for (const url of urls()) {
+      const img = await loadImage(url);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      ctx.drawImage(img, 0, 0, SIZE, SIZE);
+      out.push(ctx.getImageData(0, 0, SIZE, SIZE));
+    }
+    return out;
+  }
+
+  async function exportAnim() {
+    const fmt = format();
+    if (!urls().length || exporting() || !support()[fmt]) return;
     setExporting(true);
     try {
-      // gifenc 无类型声明；此处忽略其隐式 any（仅用到下面三个函数）。
-      // @ts-ignore -- gifenc has no bundled types
-      const { GIFEncoder, quantize, applyPalette } = await import('gifenc');
-      const size = 300;
-      const cv = document.createElement('canvas');
-      cv.width = size;
-      cv.height = size;
-      const ctx = cv.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return;
-      const enc = GIFEncoder();
-      for (const url of list) {
-        const img = await loadImage(url);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, size, size);
-        ctx.drawImage(img, 0, 0, size, size);
-        const { data } = ctx.getImageData(0, 0, size, size);
-        const palette = quantize(data, 4);
-        const index = applyPalette(data, palette);
-        enc.writeFrame(index, size, size, { palette, delay: FRAME_MS });
-      }
-      enc.finish();
-      downloadBytes(enc.bytes(), `${safeName(props.title)}.gif`, 'image/gif');
+      const frames = await renderFrames();
+      if (!frames.length) return;
+      const bytes = await encodeAnim(fmt, frames, FRAME_MS);
+      const meta = ANIM_FORMATS.find((f) => f.id === fmt)!;
+      downloadBytes(bytes, `${safeName(props.title)}.${meta.ext}`, meta.mime);
     } catch {
       /* 忽略导出失败 */
     } finally {
@@ -173,18 +189,40 @@ export function ShareDialog(props: {
             />
           </div>
         </Show>
-        <button
-          type="button"
-          onClick={() => void exportGif()}
-          disabled={!ready() || urls().length === 0 || exporting()}
-          class="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent disabled:opacity-50"
-        >
-          <Icon
-            icon={exporting() ? 'lucide:loader-circle' : 'lucide:film'}
-            class={exporting() ? 'animate-spin' : undefined}
-          />
-          {exporting() ? t('manager.exporting') : t('manager.exportGif')}
-        </button>
+        {/* 导出：先选格式（不支持的禁用并提示），再导出当前所选格式的动图。 */}
+        <div class="mt-4 flex items-center gap-2">
+          <div class="flex flex-1 gap-1 rounded-md border p-1">
+            <For each={ANIM_FORMATS}>
+              {(f) => (
+                <button
+                  type="button"
+                  disabled={!support()[f.id] || exporting()}
+                  onClick={() => setFormat(f.id)}
+                  title={support()[f.id] ? undefined : t('manager.exportUnsupported')}
+                  class="flex-1 rounded px-2 py-1 text-xs font-medium uppercase transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                  classList={{
+                    'bg-primary text-primary-foreground': format() === f.id,
+                    'text-muted-foreground hover:bg-accent': format() !== f.id,
+                  }}
+                >
+                  {f.id}
+                </button>
+              )}
+            </For>
+          </div>
+          <button
+            type="button"
+            onClick={() => void exportAnim()}
+            disabled={!ready() || urls().length === 0 || exporting() || !support()[format()]}
+            class="flex shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            <Icon
+              icon={exporting() ? 'lucide:loader-circle' : 'lucide:download'}
+              class={exporting() ? 'animate-spin' : undefined}
+            />
+            {exporting() ? t('manager.exporting') : t('manager.exportAnim')}
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
