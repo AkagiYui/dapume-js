@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { DapumeScore } from 'dapume-js';
 
 import { atomIsActive, buildJianpuDocument } from '../lib/jianpu';
@@ -17,12 +17,27 @@ export interface JianpuScoreProps {
   onSeekBeat?: (beat: number) => void;
 }
 
-const MEASURES_PER_SYSTEM = 4;
+// 简谱排版按可用宽度自适应：只保留纵向滚动、去掉横向滚动，降低读谱心智负担。
+const MIN_MEASURE_REM = 8; // 单个小节的最小可读宽度
+const ATOM_REM = 1; // 每个音符（含间隙）的近似最小宽度，用于按密度撑宽小节、避免数字重叠
+const DEFAULT_AVAILABLE_REM = 30; // 首帧测量前的可用宽度兜底
+// 跟随播放时把当前小节定位在视口偏上处（约 40%），下方留出更多即将演奏的小节，便于「向下看」。
+const FOLLOW_SCROLL_ANCHOR = 0.4;
 
-function chunks<T>(items: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
-  return result;
+function rootFontPx(): number {
+  const size = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(size) && size > 0 ? size : 16;
+}
+
+// 小节内「横向最密的一条 lane」的音符数：决定该小节需要多宽才不挤压重叠。
+function measureDensity(measure: JianpuMeasure): number {
+  let max = 1;
+  for (const voice of measure.voices) {
+    const perLane = new Map<number, number>();
+    for (const atom of voice.atoms) perLane.set(atom.lane, (perLane.get(atom.lane) ?? 0) + 1);
+    for (const count of perLane.values()) if (count > max) max = count;
+  }
+  return max;
 }
 
 function accidentalText(value: number): string {
@@ -54,11 +69,15 @@ function PitchGlyph(props: { pitch: JianpuPitch; atom: JianpuAtom }) {
           <span class="jianpu-dot">·</span>
         </Show>
       </span>
-      <For each={Array.from({ length: props.atom.underlineCount })}>
-        {() => <span class="jianpu-duration-line" aria-hidden="true" />}
-      </For>
-      <Show when={props.pitch.octave < 0}>
-        <OctaveDots count={props.pitch.octave} side="below" />
+      <Show when={props.atom.underlineCount > 0 || props.pitch.octave < 0}>
+        <span class="jianpu-below-group" aria-hidden="true">
+          <For each={Array.from({ length: props.atom.underlineCount })}>
+            {() => <span class="jianpu-duration-line" />}
+          </For>
+          <Show when={props.pitch.octave < 0}>
+            <OctaveDots count={props.pitch.octave} side="below" />
+          </Show>
+        </span>
       </Show>
     </span>
   );
@@ -73,9 +92,13 @@ function RestGlyph(props: { atom: JianpuAtom }) {
           <span class="jianpu-dot">·</span>
         </Show>
       </span>
-      <For each={Array.from({ length: props.atom.underlineCount })}>
-        {() => <span class="jianpu-duration-line" aria-hidden="true" />}
-      </For>
+      <Show when={props.atom.underlineCount > 0}>
+        <span class="jianpu-below-group" aria-hidden="true">
+          <For each={Array.from({ length: props.atom.underlineCount })}>
+            {() => <span class="jianpu-duration-line" />}
+          </For>
+        </span>
+      </Show>
     </span>
   );
 }
@@ -134,12 +157,61 @@ function voiceHeight(system: JianpuMeasure[], trackNo: number): number {
 
 export function JianpuScore(props: JianpuScoreProps) {
   const document = createMemo(() => buildJianpuDocument(props.score, props.source));
-  const systems = createMemo(() => chunks(document().measures, MEASURES_PER_SYSTEM));
+  let rulerElement: HTMLDivElement | undefined;
+  // 折行用的可用宽度「现读」隐藏标尺的真实像素宽（不缓存、不估算），由 layoutTick 触发重算。
+  const [layoutTick, setLayoutTick] = createSignal(0);
+  const availableRem = () => {
+    layoutTick();
+    const px = rulerElement?.clientWidth ?? 0;
+    return px > 0 ? px / rootFontPx() : DEFAULT_AVAILABLE_REM;
+  };
+  // 每个小节所需宽度（rem）：按密度撑宽，但不超过整行可用宽度（极端密集时退化为占满整行）。
+  const measureWidthRem = (measure: JianpuMeasure) =>
+    Math.min(availableRem(), Math.max(MIN_MEASURE_REM, measureDensity(measure) * ATOM_REM));
+  // 贪心装箱：按累计宽度把小节折到多行（仅纵向滚动）；每行至少 1 个小节，密集小节自动更宽。
+  const rows = createMemo<JianpuMeasure[][]>(() => {
+    const usable = availableRem();
+    const out: JianpuMeasure[][] = [];
+    let row: JianpuMeasure[] = [];
+    let width = 0;
+    for (const measure of document().measures) {
+      const w = measureWidthRem(measure);
+      if (row.length > 0 && width + w > usable + 0.01) {
+        out.push(row);
+        row = [];
+        width = 0;
+      }
+      row.push(measure);
+      width += w;
+    }
+    if (row.length > 0) out.push(row);
+    return out;
+  });
   // 和弦解析仍保留在模型中，按当前产品要求暂不进入出版式简谱。
   const visibleTracks = createMemo(() => document().tracks.filter((track) => !track.isChord));
   const activeRanges = () => props.activeRanges ?? [];
   const measureElements = new Map<number, HTMLElement>();
   let scrollElement: HTMLDivElement | undefined;
+
+  // 用一条隐藏「标尺」测量小节区的真实宽度来折行（不估算开销，杜绝因估算偏大而横向溢出）。
+  onMount(() => {
+    const ruler = rulerElement;
+    if (!ruler) return;
+    const bump = () => setLayoutTick((tick) => tick + 1);
+    bump();
+    // 分栏 / 滚动条槽位等布局稳定的时机因环境而异；多次延迟重算，确保最终按真实宽度折行（现读标尺宽）。
+    requestAnimationFrame(() => requestAnimationFrame(bump));
+    const timers = [60, 200, 400].map((delay) => setTimeout(bump, delay));
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(bump);
+      observer.observe(ruler);
+    }
+    onCleanup(() => {
+      for (const timer of timers) clearTimeout(timer);
+      observer?.disconnect();
+    });
+  });
 
   createEffect(() => {
     const measure = props.activeMeasure;
@@ -148,7 +220,11 @@ export function JianpuScore(props: JianpuScoreProps) {
     if (!element) return;
     const scrollRect = scrollElement.getBoundingClientRect();
     const measureRect = element.getBoundingClientRect();
-    const top = scrollElement.scrollTop + measureRect.top - scrollRect.top - (scrollRect.height - measureRect.height) / 2;
+    const top =
+      scrollElement.scrollTop +
+      measureRect.top -
+      scrollRect.top -
+      (scrollRect.height - measureRect.height) * FOLLOW_SCROLL_ANCHOR;
     scrollElement.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   });
 
@@ -162,18 +238,29 @@ export function JianpuScore(props: JianpuScoreProps) {
           </span>
           <span class="jianpu-tempo"><span aria-hidden="true">♩</span>={props.score.sections[0]?.bpm ?? 120}</span>
         </div>
-        <For each={systems()}>
-          {(system) => (
-            <section class="jianpu-system" data-system-start={system[0]?.number}>
-              <span class="jianpu-system-number">({system[0]?.number})</span>
+        {/* 隐藏标尺：与真实小节行同宽（同样的行号槽 + 1fr），用于测量小节区真实宽度。 */}
+        <div class="jianpu-system jianpu-ruler" aria-hidden="true">
+          <div class="jianpu-measure-grid" ref={rulerElement} />
+        </div>
+        <For each={rows()}>
+          {(row, rowIndex) => {
+            // 末行用各小节自然宽度（左对齐、右侧留白）；其余行用 minmax(..,1fr) 撑满整行。
+            const template = () =>
+              row
+                .map((measure) =>
+                  rowIndex() === rows().length - 1
+                    ? `${measureWidthRem(measure)}rem`
+                    : `minmax(${measureWidthRem(measure)}rem, 1fr)`,
+                )
+                .join(' ');
+            return (
+            <section class="jianpu-system" data-system-start={row[0]?.number}>
+              <span class="jianpu-system-number">({row[0]?.number})</span>
               <Show when={visibleTracks().length > 1}>
                 <span class="jianpu-system-brace" aria-hidden="true">{'{'}</span>
               </Show>
-              <div
-                class="jianpu-measure-grid"
-                style={{ '--jianpu-measures': String(system.length) }}
-              >
-                <For each={system}>
+              <div class="jianpu-measure-grid" style={{ 'grid-template-columns': template() }}>
+                <For each={row}>
                   {(measure, measureIndex) => (
                     <div
                       ref={(element) => measureElements.set(measure.number, element)}
@@ -198,7 +285,7 @@ export function JianpuScore(props: JianpuScoreProps) {
                           return (
                             <div
                               class={cn('jianpu-measure-cell', measureIndex() === 0 && 'is-system-start')}
-                              style={{ height: `${voiceHeight(system, track.trackNo)}rem` }}
+                              style={{ height: `${voiceHeight(row, track.trackNo)}rem` }}
                             >
                               <For each={voice()?.atoms ?? []}>
                                 {(atom) => (
@@ -218,7 +305,8 @@ export function JianpuScore(props: JianpuScoreProps) {
                 </For>
               </div>
             </section>
-          )}
+            );
+          }}
         </For>
       </div>
     </div>
