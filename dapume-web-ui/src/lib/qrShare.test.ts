@@ -182,6 +182,18 @@ describe('v3 二进制 + 压缩往返', () => {
     expect(r.total).toBeGreaterThan(1);
   });
 
+  it('各帧载荷均匀（末帧不明显偏小，二维码尺寸一致）', async () => {
+    // 内容熵足够高，压缩后需多帧；逐一断言各帧载荷至多差 1 字节。
+    const content =
+      Array.from({ length: 600 }, (_, i) => `m${i}:${(i * 37) % 97}/${((i * 13) % 7) + 1}`).join(' ');
+    const { frames, total } = await buildShareFramesV3('Even', content);
+    expect(total).toBeGreaterThan(1);
+    const payloadLens = frames.map((f) => parseBinFrame(f)!.payload.length);
+    const min = Math.min(...payloadLens);
+    const max = Math.max(...payloadLens);
+    expect(max - min).toBeLessThanOrEqual(1);
+  });
+
   it('压缩确实把帧数压下来（vs 未压缩 v2）', async () => {
     const content = '1234567 '.repeat(400);
     const v3 = await buildShareFramesV3('R', content);

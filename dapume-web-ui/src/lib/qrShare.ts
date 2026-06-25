@@ -271,9 +271,18 @@ export async function buildShareFramesV3(
   const key = hash32(comp);
   const total = Math.max(1, Math.ceil(comp.length / BIN_PAYLOAD));
   if (total > 255) throw new Error('content too large for QR sharing'); // 帧序号/总数为 uint8
+  // 均匀切片：每帧载荷为 base 或 base+1 字节（前 rem 帧各多 1 字节），各帧至多差 1 字节。
+  // 若按定长 BIN_PAYLOAD 贪心切，末帧只剩 comp.length % BIN_PAYLOAD 字节，会选到更低的二维码
+  // 版本，密度/尺寸与其余帧不一致。均分后帧数 total 不变、每帧仍 ≤ BIN_PAYLOAD（因 total =
+  // ceil(comp.length / BIN_PAYLOAD)），扫描稳定性与解码逻辑均不受影响。
+  const base = Math.floor(comp.length / total);
+  const rem = comp.length % total;
   const frames: Uint8Array[] = [];
+  let off = 0;
   for (let i = 0; i < total; i++) {
-    const slice = comp.subarray(i * BIN_PAYLOAD, (i + 1) * BIN_PAYLOAD);
+    const sliceLen = base + (i < rem ? 1 : 0);
+    const slice = comp.subarray(off, off + sliceLen);
+    off += sliceLen;
     const frame = new Uint8Array(BIN_HEADER + slice.length);
     frame[0] = BIN_MAGIC;
     frame[1] = BIN_PROTOCOL_VERSION;
