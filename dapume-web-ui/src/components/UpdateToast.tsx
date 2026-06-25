@@ -28,7 +28,7 @@ export function UpdateToast(props: { show: boolean; onRefresh: () => void; onDis
           onClick={props.onDismiss}
           aria-label={t('update.dismiss')}
           title={t('update.dismiss')}
-          class="rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          class="inline-flex items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Icon icon="lucide:x" />
         </button>
