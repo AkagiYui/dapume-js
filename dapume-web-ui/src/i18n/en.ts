@@ -111,6 +111,7 @@ export const en: typeof zh = {
     autoOpen: 'Auto-open last edited score on direct visit',
     updated: 'Updated',
     exported: 'Exported',
+    exportHint: 'Open dapu.me to get this score',
     notes: 'notes',
     sortBy: 'Sort',
     sortRecent: 'Recent',

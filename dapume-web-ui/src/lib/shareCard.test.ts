@@ -6,7 +6,12 @@ import {
   formatShareTime,
 } from './shareCard';
 
-const LABELS = { notes: '音符', updated: '更新于', exported: '导出于' };
+const LABELS = {
+  notes: '音符',
+  updated: '更新于',
+  exported: '导出于',
+  cta: '立即打开 dapu.me 获得该乐谱',
+};
 // 固定为年中时刻，避开时区把年份推到边界。
 const TS = Date.UTC(2026, 5, 26, 4, 30, 0);
 
@@ -47,6 +52,7 @@ describe('buildShareCardText', () => {
     });
     expect(text.title).toBe('小星星');
     expect(text.stats).toBe('128 音符 · 1:35');
+    expect(text.cta).toBe('立即打开 dapu.me 获得该乐谱');
   });
   it('有更新时间则含更新行 + 导出行（共两行，更新在前）', () => {
     const text = buildShareCardText({
@@ -97,7 +103,8 @@ describe('computeShareCardLayout', () => {
   it('各元素自上而下严格递增、互不重叠', () => {
     const l = computeShareCardLayout(2);
     expect(l.titleTop).toBeLessThan(l.qr.y);
-    expect(l.qr.y + l.qr.size).toBeLessThan(l.statsTop);
+    expect(l.qr.y + l.qr.size).toBeLessThan(l.ctaTop);
+    expect(l.ctaTop).toBeLessThan(l.statsTop);
     expect(l.statsTop).toBeLessThan(l.dividerY);
     expect(l.dividerY).toBeLessThan(l.metaTops[0]);
     expect(l.metaTops[0]).toBeLessThan(l.metaTops[1]);

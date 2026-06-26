@@ -107,6 +107,7 @@ export const zh = {
     autoOpen: '直接访问时自动打开上次编辑的乐谱',
     updated: '更新于',
     exported: '导出于',
+    exportHint: '立即打开 dapu.me 获得该乐谱',
     notes: '音符',
     sortBy: '排序',
     sortRecent: '最近',

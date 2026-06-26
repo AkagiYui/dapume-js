@@ -151,6 +151,7 @@ export function ShareDialog(props: {
         notes: t('manager.notes'),
         updated: t('manager.updated'),
         exported: t('manager.exported'),
+        cta: t('manager.exportHint'),
       },
     });
     const layout = computeShareCardLayout(text.metaRows.length);

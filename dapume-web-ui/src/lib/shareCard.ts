@@ -12,6 +12,9 @@
 // 布局（纯函数，可测）
 // ---------------------------------------------------------------------------
 
+/** 引导语里要加粗的站点域名（提示扫码者去这里导入获取乐谱）。 */
+export const SITE = 'dapu.me';
+
 /** 二维码槽位边长（沿用导出前的尺寸，保证扫描行为一致）。 */
 const QR_SIZE = 300;
 /** 卡片宽度：QR 居中后两侧各留 30px 白边（≥ 静默区）。 */
@@ -24,7 +27,10 @@ const TITLE_BAND = 30; // 标题行高
 const TITLE_FONT = 21; // 标题字号（过宽时自适应缩小）
 const TITLE_MIN = 14; // 标题最小字号
 const GAP_TITLE_QR = 16;
-const GAP_QR_STATS = 22;
+const GAP_QR_CTA = 18;
+const CTA_BAND = 22; // 「打开 dapu.me」引导语行高
+const CTA_FONT = 15;
+const GAP_CTA_STATS = 12;
 const STATS_BAND = 20; // 统计行高
 const STATS_FONT = 15;
 const GAP_STATS_DIV = 14;
@@ -41,6 +47,8 @@ export interface ShareCardLayout {
   titleTop: number;
   titleFontPx: number;
   titleMinFontPx: number;
+  ctaTop: number;
+  ctaFontPx: number;
   statsTop: number;
   statsFontPx: number;
   dividerY: number;
@@ -58,7 +66,9 @@ export function computeShareCardLayout(metaRows: number): ShareCardLayout {
   const titleTop = y;
   y += TITLE_BAND + GAP_TITLE_QR;
   const qrY = y;
-  y += QR_SIZE + GAP_QR_STATS;
+  y += QR_SIZE + GAP_QR_CTA;
+  const ctaTop = y;
+  y += CTA_BAND + GAP_CTA_STATS;
   const statsTop = y;
   y += STATS_BAND + GAP_STATS_DIV;
   const dividerY = y;
@@ -76,6 +86,8 @@ export function computeShareCardLayout(metaRows: number): ShareCardLayout {
     titleTop,
     titleFontPx: TITLE_FONT,
     titleMinFontPx: TITLE_MIN,
+    ctaTop,
+    ctaFontPx: CTA_FONT,
     statsTop,
     statsFontPx: STATS_FONT,
     dividerY,
@@ -118,16 +130,18 @@ export interface ShareCardInput {
   exportedAt: number;
   locale: string;
   /** 已本地化的标签文案（避免本模块依赖 i18n 单例，保持可测）。 */
-  labels: { notes: string; updated: string; exported: string };
+  labels: { notes: string; updated: string; exported: string; cta: string };
 }
 
 export interface ShareCardText {
   title: string;
+  /** 引导语（如「立即打开 dapu.me 获得该乐谱」），画在二维码下方。 */
+  cta: string;
   stats: string;
   metaRows: string[];
 }
 
-/** 把元数据组装成卡片要画的三类文本：标题、统计行、时间行（1~2 行）。 */
+/** 把元数据组装成卡片要画的文本：标题、引导语、统计行、时间行（1~2 行）。 */
 export function buildShareCardText(input: ShareCardInput): ShareCardText {
   const stats = `${input.notes} ${input.labels.notes} · ${formatDuration(input.durationMs)}`;
   const metaRows: string[] = [];
@@ -135,7 +149,7 @@ export function buildShareCardText(input: ShareCardInput): ShareCardText {
     metaRows.push(`${input.labels.updated} ${formatShareTime(input.updatedAt, input.locale)}`);
   }
   metaRows.push(`${input.labels.exported} ${formatShareTime(input.exportedAt, input.locale)}`);
-  return { title: input.title.trim(), stats, metaRows };
+  return { title: input.title.trim(), cta: input.labels.cta, stats, metaRows };
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +163,58 @@ const FONT_STACK =
 const COLORS = {
   bg: '#ffffff',
   title: '#18181b',
+  cta: '#18181b', // 引导语里加粗的域名
+  ctaMuted: '#52525b', // 引导语其余文字
   stats: '#3f3f46',
   divider: '#e4e4e7',
   meta: '#71717a',
 };
+
+/** 把引导语按域名 SITE 拆成「普通 + 加粗域名 + 普通」三段，便于域名加粗。 */
+function splitCta(s: string): { text: string; strong: boolean }[] {
+  const i = s.indexOf(SITE);
+  if (i < 0) return s ? [{ text: s, strong: false }] : [];
+  const parts: { text: string; strong: boolean }[] = [];
+  if (i > 0) parts.push({ text: s.slice(0, i), strong: false });
+  parts.push({ text: SITE, strong: true });
+  const rest = s.slice(i + SITE.length);
+  if (rest) parts.push({ text: rest, strong: false });
+  return parts;
+}
+
+/** 居中画一行引导语：域名加粗深色、其余次强；整体过宽则同步缩小字号。 */
+function drawCtaLine(
+  ctx: CanvasRenderingContext2D,
+  cta: string,
+  cx: number,
+  top: number,
+  maxW: number,
+  baseFs: number,
+): void {
+  const parts = splitCta(cta);
+  if (!parts.length) return;
+  const fontOf = (strong: boolean, fs: number) => `${strong ? 700 : 500} ${fs}px ${FONT_STACK}`;
+  const widthAt = (fs: number) => {
+    let w = 0;
+    for (const p of parts) {
+      ctx.font = fontOf(p.strong, fs);
+      w += ctx.measureText(p.text).width;
+    }
+    return w;
+  };
+  let fs = baseFs;
+  while (fs > 11 && widthAt(fs) > maxW) fs -= 1;
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  let x = cx - widthAt(fs) / 2;
+  for (const p of parts) {
+    ctx.font = fontOf(p.strong, fs);
+    ctx.fillStyle = p.strong ? COLORS.cta : COLORS.ctaMuted;
+    ctx.fillText(p.text, x, top);
+    x += ctx.measureText(p.text).width;
+  }
+  ctx.textAlign = prevAlign;
+}
 
 /** 二分查找最长可容纳前缀，超宽时以省略号截断。 */
 function ellipsize(ctx: CanvasRenderingContext2D, s: string, maxW: number): string {
@@ -204,6 +266,9 @@ export function drawShareCard(
 
   // 二维码（原尺寸槽位，四周白边作静默区）
   ctx.drawImage(qr, layout.qr.x, layout.qr.y, layout.qr.size, layout.qr.size);
+
+  // 引导语：立即打开 dapu.me 获得该乐谱（域名加粗）
+  if (text.cta) drawCtaLine(ctx, text.cta, cx, layout.ctaTop, maxTextW, layout.ctaFontPx);
 
   // 统计行：音符数 · 时长
   ctx.fillStyle = COLORS.stats;
