@@ -423,6 +423,7 @@ export default function ScoreManager() {
         open={shareTarget() !== null}
         title={shareTarget()?.title ?? ''}
         content={shareTarget()?.content ?? ''}
+        updatedAt={shareTarget()?.updatedAt}
         onClose={() => setShareTarget(null)}
       />
       <ImportDialog

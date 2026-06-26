@@ -1424,6 +1424,7 @@ export default function Workbench(props: { doc: ScoreDoc }) {
       open={shareOpen()}
       title={docTitle()}
       content={scoreText()}
+      updatedAt={props.doc.updatedAt}
       onClose={() => setShareOpen(false)}
     />
     {/* 重命名乐谱 */}

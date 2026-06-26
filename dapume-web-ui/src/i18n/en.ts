@@ -110,6 +110,7 @@ export const en: typeof zh = {
     delete: 'Delete',
     autoOpen: 'Auto-open last edited score on direct visit',
     updated: 'Updated',
+    exported: 'Exported',
     notes: 'notes',
     sortBy: 'Sort',
     sortRecent: 'Recent',

@@ -106,6 +106,7 @@ export const zh = {
     delete: '删除',
     autoOpen: '直接访问时自动打开上次编辑的乐谱',
     updated: '更新于',
+    exported: '导出于',
     notes: '音符',
     sortBy: '排序',
     sortRecent: '最近',

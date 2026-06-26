@@ -131,7 +131,9 @@ async function encodeGif(frames: ImageData[], delayMs: number): Promise<Uint8Arr
   const { GIFEncoder, quantize, applyPalette } = await import('gifenc');
   const enc = GIFEncoder();
   for (const f of frames) {
-    const palette = quantize(f.data, 4);
+    // 帧内除黑白二维码外还有标题/统计等抗锯齿文字，需多于纯黑白的色板才清晰；
+    // 黑、白必入色板，二维码仍保持锐利。16 色足够覆盖几级灰阶，体积仍很小。
+    const palette = quantize(f.data, 16);
     const index = applyPalette(f.data, palette);
     enc.writeFrame(index, f.width, f.height, { palette, delay: delayMs });
   }

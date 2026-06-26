@@ -7,13 +7,16 @@
  *   分段线段展示已收集数量，扫到新 checksum 则清零重来，集齐校验通过后导入。
  * qrcode / jsQR 均按需动态导入，不进首屏包。摄像头需安全上下文（https / localhost）。
  */
-import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { parse } from 'dapume-js';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { Icon } from './Icon';
 import { t } from '../i18n';
+import { locale } from '../stores/settings';
 import { assemble, assembleBin, buildShareFramesV3, parseBinFrame, parseFrame } from '../lib/qrShare';
 import { downloadBytes } from '../lib/download';
 import { ANIM_FORMATS, encodeAnim, supportedFormats, type AnimFormat } from '../lib/animExport';
+import { buildShareCardText, computeShareCardLayout, drawShareCard } from '../lib/shareCard';
 
 /** 循环播放的帧间隔（毫秒）：留足摄像头锁定每帧的时间。导出动图也用作每帧时延。 */
 const FRAME_MS = 500;
@@ -46,8 +49,19 @@ export function ShareDialog(props: {
   open: boolean;
   title: string;
   content: string;
+  /** 乐谱更新时间（毫秒）；用于导出图片上的「更新时间」，缺省则不显示该行。 */
+  updatedAt?: number;
   onClose: () => void;
 }) {
+  // 导出图片信息卡用的轻量统计（音符数 / 时长），随谱面变化重算并缓存。
+  const stats = createMemo(() => {
+    try {
+      const s = parse(props.content);
+      return { notes: s.notes.length, durationMs: s.durationMs };
+    } catch {
+      return { notes: 0, durationMs: 0 };
+    }
+  });
   const [urls, setUrls] = createSignal<string[]>([]);
   const [idx, setIdx] = createSignal(0);
   const [ready, setReady] = createSignal(false);
@@ -109,7 +123,6 @@ export function ShareDialog(props: {
   // 导出：把这组二维码编码为动图，可选 GIF / WebP / AVIF（编码器按需动态导入，不进首屏包）。
   // 三者都是多帧动画，导入端用 WebCodecs 逐帧解码即可完整还原长谱；每帧时延沿用 FRAME_MS。
   // GIF 通用；WebP/AVIF 视浏览器编码能力开放，不支持的格式在 UI 上禁用，绝不产出坏文件。
-  const SIZE = 300;
   const [exporting, setExporting] = createSignal(false);
   const [format, setFormat] = createSignal<AnimFormat>('gif');
   const [support, setSupport] = createSignal<Record<AnimFormat, boolean>>({ gif: true, webp: false });
@@ -123,20 +136,34 @@ export function ShareDialog(props: {
     });
   });
 
-  // 把当前这组二维码逐帧画到画布并取出 ImageData，供各编码器使用（统一白底、统一尺寸）。
+  // 把当前这组二维码逐帧画到「信息卡」（标题 + 二维码 + 音符数/时长/更新时间/导出时间）并取出
+  // ImageData，供各编码器使用。文字每帧相同、仅二维码不同，复用同一 layout/text 逐帧重绘。
   async function renderFrames(): Promise<ImageData[]> {
+    const st = stats();
+    const text = buildShareCardText({
+      title: props.title,
+      notes: st.notes,
+      durationMs: st.durationMs,
+      updatedAt: props.updatedAt,
+      exportedAt: Date.now(),
+      locale: locale(),
+      labels: {
+        notes: t('manager.notes'),
+        updated: t('manager.updated'),
+        exported: t('manager.exported'),
+      },
+    });
+    const layout = computeShareCardLayout(text.metaRows.length);
     const cv = document.createElement('canvas');
-    cv.width = SIZE;
-    cv.height = SIZE;
+    cv.width = layout.width;
+    cv.height = layout.height;
     const ctx = cv.getContext('2d', { willReadFrequently: true });
     if (!ctx) return [];
     const out: ImageData[] = [];
     for (const url of urls()) {
       const img = await loadImage(url);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, SIZE, SIZE);
-      ctx.drawImage(img, 0, 0, SIZE, SIZE);
-      out.push(ctx.getImageData(0, 0, SIZE, SIZE));
+      drawShareCard(ctx, img, layout, text);
+      out.push(ctx.getImageData(0, 0, layout.width, layout.height));
     }
     return out;
   }
